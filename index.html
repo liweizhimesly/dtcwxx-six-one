@@ -9,6 +9,9 @@
         <img src="class.webp" width="150">
         <h1>6(1)班 班级网站</h1>
     </div>
+    <div class="bom-1" id="b">
+        <text>关于网站</text>
+    </div>
     <div class="boms">
         <div class="bom" id="b0">
             <text>进入论坛</text>
@@ -69,6 +72,23 @@
             background-image: linear-gradient(to right, #cf0083, #b1f3ff);
             cursor: pointer;
             user-select: none;
+        }.bom-1{ 
+            position: absolute;
+            top:0;
+            right: 0;
+            /*margin: 8px;
+            padding: 8px 0;
+            line-height: 60px;
+            width: 150px;
+            height: 60px;*/
+            text-align: center;
+            color: white;
+            font-size: 20px;
+            /*border: 1px solid rgba(0, 0, 0, 0.162);
+            border-radius: 10px;*/
+            /*background-image: linear-gradient(to right, #f7a9a9, #cea7eb);*/
+            cursor: pointer;
+            user-select: none;
         }
     </style>
     <script>
@@ -80,6 +100,9 @@
         }
         b2.onclick=function(){
             window.location = "data.html";
+        }
+        b.onclick=function(){
+            window.location = "about.html";
         }
     </script>
 </body>
