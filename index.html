@@ -5,7 +5,7 @@
     <meta name="msvalidate.01" content="B7B04863D653A25547BB3F461821C8C7" />
 </head>
     <div class="title1">
-        <img src="sbschool.webp" width="100"><br>
+        <img src="sbschool.webp" width="100" id="ddd"><br>
         <img src="class.webp" width="150">
         <h1>6(1)班 班级网站</h1>
     </div>
@@ -92,6 +92,13 @@
         }
     </style>
     <script>
+        let a = 0;
+        ddd.onclick=function(){
+            a = a + 1;
+            if(a==5){
+                window.location = "guiyi.html"
+            }
+        }
         b0.onclick=function(){
             window.location = "chat.html";
         }
@@ -104,5 +111,6 @@
         b.onclick=function(){
             window.location = "about.html";
         }
+        
     </script>
 </body>
