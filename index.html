@@ -4,6 +4,11 @@
     <title>芙蓉区大同崇文小学六年一班网站(非官个人建)</title>
     <meta name="msvalidate.01" content="B7B04863D653A25547BB3F461821C8C7" />
 </head>
+
+<body>
+    <div class="old" id="old">
+        切换背景
+    </div>
     <div class="title1">
         <img src="sbschool.webp" width="100" id="ddd"><br>
         <img src="class.webp" width="150">
@@ -26,7 +31,10 @@
     <style>
         body{
             text-align: center;
-            background-image: linear-gradient(to right, #5becff, #ffa1e9);
+            /*background-image: linear-gradient(to right, #5becff, #ffa1e9);*/
+            background-image: url(./Zanshi.webp);
+            background-size: cover;
+            /*background-position: center;*/
         }.boms{
             display: flex;
             justify-content: center;
@@ -89,14 +97,32 @@
             /*background-image: linear-gradient(to right, #f7a9a9, #cea7eb);*/
             cursor: pointer;
             user-select: none;
+        }.old{
+            position: absolute;
+            top:0;
+            right: calc(100%-100px);
+            color: white;
+            cursor: pointer;
+            user-select: none;
         }
     </style>
     <script>
+        let b = false;
+        /*localStorage.setItem("qiehuan","False");*/
+        const qiehuan = localStorage.getItem("qiehuan");
+        if(qiehuan == "true"){
+            b = true;
+        }
+        if(b){
+            document.body.style.backgroundImage = "linear-gradient(to right, #5becff, #ffa1e9)";
+        }else{
+            document.body.style.backgroundImage = "url(./Zanshi.webp)";
+        }
         let a = 0;
         ddd.onclick=function(){
             a = a + 1;
             if(a==5){
-                window.location = "guiyi.html"
+                window.location = "guiyi.html";
             }
         }
         b0.onclick=function(){
@@ -111,6 +137,14 @@
         b.onclick=function(){
             window.location = "about.html";
         }
-        
+        old.onclick=function(){
+            b = !b;
+            localStorage.setItem("qiehuan",b.toString());
+            if(b){
+                document.body.style.backgroundImage = "linear-gradient(to right, #5becff, #ffa1e9)";
+            }else{
+                document.body.style.backgroundImage = "url(./Zanshi.webp)";
+            }
+        }
     </script>
 </body>
