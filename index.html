@@ -9,6 +9,9 @@
     <div class="old" id="old">
         切换背景
     </div>
+    <div class="eatshit" id="es">
+        我是一个彩蛋ovo，但是你千万不要点击窝awa
+    </div>
     <div class="title1">
         <img src="sbschool.webp" width="100" id="ddd"><br>
         <img src="class.webp" width="150">
@@ -100,10 +103,18 @@
         }.old{
             position: absolute;
             top:0;
-            left: 0;
+            right: calc(100%-100px);
             color: white;
             cursor: pointer;
             user-select: none;
+        }.eatshit{
+            position: absolute;
+            left:0;
+            bottom: 0;
+            /*color: white;*/
+            cursor: pointer;
+            user-select: none;
+
         }
     </style>
     <script>
@@ -146,8 +157,8 @@
                 document.body.style.backgroundImage = "url(./Zanshi.webp)";
             }
         }
+        es.onclick=function(){
+            window.location = "es.html";
+        }
     </script>
-
 </body>
-
-
