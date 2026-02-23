@@ -2,14 +2,14 @@
 <html lang="zh-CN">
 <head>
     <title>芙蓉区大同崇文小学六年一班网站(非官个人建)</title>
-    <meta name="msvalidate.01" content="B7B04863D653A25547BB3F461821C8C7" />
+    <meta charset="UTF-8" name="msvalidate.01" content="B7B04863D653A25547BB3F461821C8C7" />
     <link rel="icon" href="/favicon.ico">
 </head>
 
 <body>
-    <div class="old" id="old">
+    <!--<div class="old" id="old">
         切换背景
-    </div>
+    </div>-->
     <div class="eatshit" id="es">
         我是一个彩蛋ovo，但是你千万不要点击窝awa
     </div>
@@ -36,9 +36,11 @@
         body{
             text-align: center;
             /*background-image: linear-gradient(to right, #5becff, #ffa1e9);*/
-            background-image: url(./Zanshi.webp);
+            background-color: black;
             background-size: cover;
             /*background-position: center;*/
+        }.title1{
+            color:white;
         }.boms{
             display: flex;
             justify-content: center;
@@ -112,7 +114,7 @@
             position: absolute;
             left:0;
             bottom: 0;
-            /*color: white;*/
+            color: gray;
             cursor: pointer;
             user-select: none;
 
@@ -122,14 +124,14 @@
         let b = false;
         /*localStorage.setItem("qiehuan","False");*/
         const qiehuan = localStorage.getItem("qiehuan");
-        if(qiehuan == "true"){
+        /*if(qiehuan == "true"){
             b = true;
         }
         if(b){
             document.body.style.backgroundImage = "url(./Now.webp)";
         }else{
             document.body.style.backgroundImage = "url(./Zanshi.webp)";
-        }
+        }*/
         let a = 0;
         ddd.onclick=function(){
             a = a + 1;
@@ -164,4 +166,5 @@
     </script>
 
 </body>
+
 
