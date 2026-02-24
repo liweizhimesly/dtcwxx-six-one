@@ -10,52 +10,98 @@
     <!--<div class="old" id="old">
         切换背景
     </div>-->
-    <div class="eatshit" id="es">
-        我是一个彩蛋ovo，但是你千万不要点击窝awa
-    </div>
     <div class="title1">
-        <img src="sbschool.webp" width="100" id="ddd"><br>
-        <img src="class.webp" width="150">
-        <h1>6(1)班 班级网站</h1>
+        <div class="tit">
+            <img src="class.webp" width="100">
+            <img src="sbschool.webp" width="100" id="ddd">
+        </div>
+        <div class="boms">
+            <div class="bom" id="b0">
+                <text>进入论坛</text>
+            </div>
+            <div class="bom" id="b1">
+                <text>游戏</text>
+            </div>
+            <div id="b2" class="bom">
+                <text>免费资源</text>
+            </div>
+        </div>
     </div>
-    <div class="bom-1" id="bb">
-        <text>关于网站</text>
+    <div class="ab">
+    <br><h1>6(1)班 班级网站</h1>
+    <div class="div">
+        <div class="hhh">
+            <liweizhi44>
+                <h3>6(1)班 班级论坛 管理与设计员们发表：</h3>
+                关于芙蓉区大同崇文小学六年一班班级网站<br>
+                这是一个由学生自主创建和维护的六年级一班非官方班级网站，用于记录班级生活、分享创意和资源。<br>
+                <h4>网站简介</h4>
+                性质：非官方、学生个人创建<br>
+                目的：班级记忆存档、同学交流、创意分享<br>
+                <h4>网站内容</h4>
+                班级论坛：记录同学们的日常发言和趣事<br>
+                纸质游戏库：展示班级同学自创的课间游戏<br>
+                资源分享：分享学习工具和同学自研的编程项目...（如Iazylang解释器）<br>
+                <h4>技术栈</h4>
+                纯静态网站 (HTML/CSS/JavaScript)<br>
+                托管于 GitHub Pages<br>
+                <h4>特色</h4>
+                完全由学生开发：从设计到代码均由班级同学完成<br>
+                真实班级记忆：论坛内容源自真实的同学互动<br>
+                创意展示：包含自创游戏和编程项目<br>
+                <h4>协议</h4>
+                本网站内容仅供班级内部交流使用，部分资源遵循其各自的开源协议。<br>
+            </liweizhi44></div>
+        </div>
     </div>
-    <div class="boms">
-        <div class="bom" id="b0">
-            <text>进入论坛</text>
-        </div>
-        <div class="bom" id="b1">
-            <text>游戏</text>
-        </div>
-        <div id="b2" class="bom">
-            <text>免费资源</text>
-        </div>
+    <br><br><br><br><br><br><br><br><br><div class="eatshit" id="es">
+        我是一个彩蛋ovo，但是你千万不要点击窝awa
     </div>
     <style>
         body{
-            text-align: center;
-            /*background-image: linear-gradient(to right, #5becff, #ffa1e9);*/
+            position: relative;
             background-color: black;
-            background-size: cover;
-            /*background-position: center;*/
-        }.title1{
-            color:white;
+            margin: 0;              /* 移除默认边距 */
+            /* min-height: 100vh;      确保body至少占满视口高度 */
+            display: flex;          /* 启用Flexbox */
+            flex-direction: column; /* 垂直排列子元素 */
+        }h1{
+            /*靠左*/
+            display: flex;
+            color: white;
+        }
+        .tit{
+            /* float: left; */
+            display: flex;
+            justify-content: flex-start;
+        }
+        .title1 {
+            width: 94.84%;
+            /* max-width: 1200px;      可选：设置最大宽度 */
+            height: 100px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            margin: 0 auto;         /* 这行实现水平居中 */
+            /* margin: 0 auto; 的意思是：上下外边距为0，左右外边距自动 */
         }.boms{
             display: flex;
-            justify-content: center;
-        }.bom{ 
-            margin: 8px;
-            padding: 8px 0;
+            justify-content: flex-end;
+            font-weight: bold;
+            
+        }.bom{  
+            float: left;
+            margin: 2px;
+            padding: 2px 0;
             line-height: 60px;
-            width: 150px;
+            width: 100px;
             height: 60px;
             text-align: center;
-            color: black;
-            font-size: 25px;
+            color: rgb(255, 255, 255);
+            font-size: 17px;
             border: 1px solid rgba(0, 0, 0, 0.162);
             border-radius: 10px;
-            background-color: white;
+            /* background-color: white; */
             cursor: pointer;
             user-select: none;
         }.bom1{
@@ -86,24 +132,24 @@
             background-image: linear-gradient(to right, #cf0083, #b1f3ff);
             cursor: pointer;
             user-select: none;
-        }.bom-1{ 
+         }/*.bom-1{ 
             position: absolute;
             top:0;
             right: 0;
-            /*margin: 8px;
+            margin: 8px;
             padding: 8px 0;
             line-height: 60px;
             width: 150px;
-            height: 60px;*/
+            height: 60px;
             text-align: center;
             color: white;
             font-size: 20px;
-            /*border: 1px solid rgba(0, 0, 0, 0.162);
-            border-radius: 10px;*/
-            /*background-image: linear-gradient(to right, #f7a9a9, #cea7eb);*/
+            border: 1px solid rgba(0, 0, 0, 0.162);
+            border-radius: 10px;
+            background-image: linear-gradient(to right, #f7a9a9, #cea7eb);
             cursor: pointer;
             user-select: none;
-        }.old{
+        }*/.old{ 
             position: absolute;
             top:0;
             right: calc(100%-100px);
@@ -118,6 +164,10 @@
             cursor: pointer;
             user-select: none;
 
+        }.div{
+            color: white;
+        }.ab{
+            padding-left: 10px;
         }
     </style>
     <script>
