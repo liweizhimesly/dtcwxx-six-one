@@ -2,14 +2,25 @@
 <html lang="zh-CN">
 <head>
     <title>芙蓉区大同崇文小学六年一班论坛(非官个人建)</title>
+    <meta charset="UTF-8">
 </head>
+<div class="hd">
+    <br>
+</div>
 <body>
-    <img src="sbschool.webp" width="100">
-    <img src="class.webp" width="110">
-    <div class="bom" id="b0">
-        <text>返回首页</text>
+    <div class="title1">
+        <div class="tit">
+            <img src="class.webp" width="100">
+            <img src="sbschool.webp" width="100" id="ddd">
+        </div>
+        <div class="boms">
+            <div class="bom" id="b0">
+                <text>返回首页</text>
+            </div>
+        </div>
     </div>
-    <div class="tit">
+
+    <div class="ab">
     <h1>6(1)班 班级论坛</h1>
     <h2>本论坛提倡友好交流</h2>
     <h3>给我写申请发言，格式：匿名（是否）；标题；副标题；内容，纸质或微信QQ。每周日18：00左右更新，也有可能提前。</h3>
@@ -40,10 +51,19 @@
     </div>
     <style>
         body{
+            position: relative;
             background-color: black;
+            margin: 0;              /* 移除默认边距 */
+            /* min-height: 100vh;      确保body至少占满视口高度 */
+            display: flex;          /* 启用Flexbox */
+            flex-direction: column; /* 垂直排列子元素 */
         }
-        .tit{
+        .hd{
+            font-size: 10px;
+        }
+        .ab{
             color: white;
+            padding-left: 10px;
         }
         .div{
             margin: 8px;
@@ -58,22 +78,43 @@
             padding: 4px;
         }.bom{ 
             position: absolute;
-            color: blackn;
+            font-weight: bold;
             top:0;
             right: 0;
-            margin: 8px;
-            padding: 8px 0;
+            text-align: center;
+            float: left;
+            margin: 2px;
+            padding: 2px 0;
             line-height: 60px;
-            width: 150px; 
+            line-height: 60px;
+            width: 100px;
             height: 60px;
             text-align: center;
-            color: black;
-            font-size: 25px;
+            color: rgb(255, 255, 255);
+            font-size: 17px;
             border: 1px solid rgba(0, 0, 0, 0.162);
             border-radius: 10px;
-            background-color: white;
+            /* background-color: white; */
             cursor: pointer;
             user-select: none;
+        }        .tit{
+            /* float: left; */
+            display: flex;
+            justify-content: flex-start;
+        }.title1 {
+            width: 94.84%;
+            /* max-width: 1200px;      可选：设置最大宽度 */
+            height: 100px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            margin: 0 auto;         /* 这行实现水平居中 */
+            /* margin: 0 auto; 的意思是：上下外边距为0，左右外边距自动 */
+        }.boms{
+            display: flex;
+            justify-content: flex-end;
+            font-weight: bold;
+            
         }
     </style>
     <script>

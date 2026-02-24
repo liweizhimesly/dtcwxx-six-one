@@ -5,7 +5,9 @@
     <meta charset="UTF-8" name="msvalidate.01" content="B7B04863D653A25547BB3F461821C8C7" />
     <link rel="icon" href="/favicon.ico">
 </head>
-
+<div class="hd">
+    <br>
+</div>
 <body>
     <!--<div class="old" id="old">
         切换背景
@@ -28,7 +30,7 @@
         </div>
     </div>
     <div class="ab">
-    <br><h1>6(1)班 班级网站</h1>
+    <h1>6(1)班 班级网站</h1>
     <div class="div">
         <div class="hhh">
             <liweizhi44>
@@ -54,7 +56,8 @@
             </liweizhi44></div>
         </div>
     </div>
-    <br><br><br><br><br><br><br><br><br><div class="eatshit" id="es">
+    <br><br><br><br><br><br><br><br><br>
+    <div class="eatshit" id="es">
         我是一个彩蛋ovo，但是你千万不要点击窝awa
     </div>
     <style>
@@ -65,7 +68,11 @@
             /* min-height: 100vh;      确保body至少占满视口高度 */
             display: flex;          /* 启用Flexbox */
             flex-direction: column; /* 垂直排列子元素 */
-        }h1{
+        }
+        .hd{
+            font-size: 10px;
+        }
+        h1{
             /*靠左*/
             display: flex;
             color: white;
@@ -171,9 +178,9 @@
         }
     </style>
     <script>
-        let b = false;
+        //let b = false;
         /*localStorage.setItem("qiehuan","False");*/
-        const qiehuan = localStorage.getItem("qiehuan");
+        //const qiehuan = localStorage.getItem("qiehuan");
         /*if(qiehuan == "true"){
             b = true;
         }
@@ -198,18 +205,18 @@
         b2.onclick=function(){
             window.location = "data.html";
         }
-        bb.onclick=function(){
-            window.location = "about.html";
-        }
-        old.onclick=function(){
-            b = !b;
-            localStorage.setItem("qiehuan",b.toString());
-            if(b){
-                document.body.style.backgroundImage = "url(./Now.webp)";
-            }else{
-                document.body.style.backgroundImage = "url(./Zanshi.webp)";
-            }
-        }
+        // bb.onclick=function(){
+        //     window.location = "about.html";
+        // }
+        // old.onclick=function(){
+        //     b = !b;
+        //     localStorage.setItem("qiehuan",b.toString());
+        //     if(b){
+        //         document.body.style.backgroundImage = "url(./Now.webp)";
+        //     }else{
+        //         document.body.style.backgroundImage = "url(./Zanshi.webp)";
+        //     }
+        // }
         es.onclick=function(){
             window.location = "es.html";
         }
