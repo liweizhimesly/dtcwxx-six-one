@@ -80,6 +80,12 @@ async function 发留言() {
         alert('请填写昵称和留言内容');
         return;
     }
+    
+    // 禁用按钮，防止重复提交
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '发送中...';
+    
     try {
         const res = await fetch(API, {
             method: 'POST',
@@ -93,10 +99,15 @@ async function 发留言() {
             alert('发送成功！');
             document.getElementById('昵称').value = '';
             document.getElementById('内容').value = '';
-            加载留言(); // 刷新列表
+            await 加载留言(); // 等待刷新完成
         }
     } catch(e) {
         alert('网络错误，请稍后再试');
+        console.error(e);
+    } finally {
+        // 恢复按钮
+        btn.disabled = false;
+        btn.textContent = '发送留言';
     }
 }
 
