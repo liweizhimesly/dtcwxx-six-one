@@ -12,9 +12,9 @@
         .header h1 { margin: 0 0 5px 0; font-size: 1.8rem; }
         .current-channel-box { background: #1a1a2e; border-radius: 15px; padding: 10px 15px; margin-bottom: 20px; text-align: center; border: 1px solid #4CAF50; }
         .current-channel-label { color: #aaa; font-size: 0.85rem; }
-        .current-channel-value { color: #4CAF50; font-size: 1.5rem; font-weight: bold; margin-left: 10px; }
-        .channel-selector { background: #111; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; border: 1px solid #2a2a2a; }
-        .channel-btn { background: #1e1e2f; color: white; border: none; padding: 10px 18px; border-radius: 30px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; min-width: 70px; }
+        .current-channel-value { color: #4CAF50; font-size: 1.2rem; font-weight: bold; }
+        .channel-selector { background: #111; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; border: 1px solid #2a2a2a; max-height: 200px; overflow-y: auto; }
+        .channel-btn { background: #1e1e2f; color: white; border: none; padding: 8px 12px; border-radius: 30px; cursor: pointer; font-size: 0.75rem; transition: all 0.2s; min-width: 80px; }
         .channel-btn.active { background: #4CAF50; }
         .channel-btn.locked { background: #2a2a2a; color: #888; opacity: 0.8; }
         .channel-btn.locked::after { content: " 🔒"; }
@@ -37,14 +37,13 @@
         .back-link a { color: #4CAF50; text-decoration: none; }
         .tip { text-align: center; color: #888; font-size: 0.7rem; margin-top: 15px; }
         
-        /* 弹窗样式 */
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
         .modal-card { background: white; padding: 30px 25px; border-radius: 24px; text-align: center; width: 340px; }
         .modal-card h2 { margin: 0 0 10px 0; }
         .modal-card input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 12px; font-size: 1rem; margin: 10px 0; box-sizing: border-box; }
         .modal-card button { background: #4CAF50; color: white; border: none; padding: 12px 20px; border-radius: 30px; font-size: 1rem; cursor: pointer; width: 100%; }
         .error-msg { color: #f44336; margin-top: 12px; font-size: 0.85rem; }
-        @media (max-width: 550px) { .channel-btn { padding: 8px 14px; min-width: 55px; font-size: 0.8rem; } }
+        @media (max-width: 550px) { .channel-btn { padding: 6px 10px; min-width: 70px; font-size: 0.7rem; } }
     </style>
 </head>
 <body>
@@ -79,16 +78,15 @@
     </div>
 
     <div class="back-link"><a href="chat.html">← 返回公开论坛</a></div>
-    <div class="tip">💡 第一次进入频段需要设置密码，之后凭密码进入</div>
+    <div class="tip">💡 第一次进入频段需要设置密码，之后凭密码进入（刷新后需重新输入）</div>
 </div>
 
-<!-- 密码弹窗（通用） -->
 <div id="密码弹窗" class="modal" style="display: none;">
     <div class="modal-card">
         <h2 id="弹窗标题">🔐 频段 <span id="弹窗频段号"></span></h2>
         <p id="弹窗提示">请输入密码</p>
         <input type="password" id="密码输入" placeholder="密码" autocomplete="off">
-        <button id="弹窗确认按钮" onclick="弹窗确认()">确认</button>
+        <button onclick="弹窗确认()">确认</button>
         <div id="弹窗错误" class="error-msg"></div>
     </div>
 </div>
@@ -97,14 +95,11 @@
 const API_BASE = 'https://liweizhimesly.pythonanywhere.com';
 let 当前频段 = null;
 let 自动刷新定时器 = null;
-let 弹窗模式 = null; // 'setup' 或 'verify'
+let 弹窗模式 = null;
 let 待处理频段 = null;
 
-// 从 localStorage 读取已解锁的频段
+// 当前会话已解锁的频段（刷新页面就清空，不保存）
 let 已解锁频段 = {};
-try { const saved = localStorage.getItem('channel_unlocked'); if (saved) 已解锁频段 = JSON.parse(saved); } catch(e) {}
-
-//function 保存解锁状态() { localStorage.setItem('channel_unlocked', JSON.stringify(已解锁频段)); }
 
 // 生成频段按钮
 async function 生成频段按钮() {
@@ -114,19 +109,17 @@ async function 生成频段按钮() {
     
     for (let i = 0; i <= 15; i++) {
         const btn = document.createElement('button');
-        btn.className = 'channel-btn';
         
         if (已解锁频段[i]) {
-            btn.textContent = `频段 ${i} 🔓`;
-            btn.classList.add('active');
-            容器.appendChild(btn);
+            btn.className = 'channel-btn active';
+            btn.textContent = `频段 ${i}`;
             btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
         } else {
-            btn.textContent = `频段 ${i} 🔒`;
-            btn.classList.add('locked');
-            容器.appendChild(btn);
+            btn.className = 'channel-btn locked';
+            btn.textContent = `频段 ${i}`;
+            btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
             
-            // 异步获取创建者信息并显示
+            // 异步获取创建者信息
             (function(chan, button) {
                 fetch(`${API_BASE}/api/channel/info`, {
                     method: 'POST',
@@ -136,55 +129,63 @@ async function 生成频段按钮() {
                 .then(res => res.json())
                 .then(info => {
                     if (info.creator) {
-                        button.innerHTML = `频段 ${chan} 🔒 (${info.creator})`;
+                        button.innerHTML = `频段 ${chan} (${info.creator})`;
                     }
                 })
                 .catch(e => console.error(e));
             })(i, btn);
-            
-            btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
         }
+        容器.appendChild(btn);
     }
 }
 
 async function 选择频段(频段号) {
     if (已解锁频段[频段号]) {
-        // 已解锁，直接进入
         进入频段(频段号);
         return;
     }
     
-    // 检查频段是否已有密码
     try {
-        const res = await fetch(`${API_BASE}/api/channel/check`, {
+        const infoRes = await fetch(`${API_BASE}/api/channel/info`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ channel: 频段号 })
         });
-        const result = await res.json();
+        const info = await infoRes.json();
         
-        if (result.has_password) {
-            // 已有密码，进入验证模式
-            待处理频段 = 频段号;
+        const checkRes = await fetch(`${API_BASE}/api/channel/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: 频段号 })
+        });
+        const checkResult = await checkRes.json();
+        
+        待处理频段 = 频段号;
+        
+        if (checkResult.has_password) {
             弹窗模式 = 'verify';
             document.getElementById('弹窗标题').innerHTML = `🔐 频段 ${频段号}`;
-            document.getElementById('弹窗提示').innerHTML = '请输入密码';
-            document.getElementById('密码输入').value = '';
-            document.getElementById('弹窗错误').innerText = '';
-            document.getElementById('密码弹窗').style.display = 'flex';
+            if (info.creator) {
+                document.getElementById('弹窗提示').innerHTML = `创建者：${info.creator}<br>请输入密码`;
+            } else {
+                document.getElementById('弹窗提示').innerHTML = '请输入密码';
+            }
         } else {
-            // 没有密码，进入设置模式（创建者）
-            待处理频段 = 频段号;
             弹窗模式 = 'setup';
             document.getElementById('弹窗标题').innerHTML = `🎉 频段 ${频段号} 首次开启`;
             document.getElementById('弹窗提示').innerHTML = '请设置密码（至少4位）';
-            document.getElementById('密码输入').value = '';
-            document.getElementById('弹窗错误').innerText = '';
-            document.getElementById('密码弹窗').style.display = 'flex';
         }
+        document.getElementById('密码输入').value = '';
+        document.getElementById('弹窗错误').innerText = '';
+        document.getElementById('密码弹窗').style.display = 'flex';
     } catch(e) {
-        alert('检查频段失败，请稍后再试');
-        console.error(e);
+        待处理频段 = 频段号;
+        弹窗模式 = 'verify';
+        document.getElementById('弹窗标题').innerHTML = `🔐 频段 ${频段号}`;
+        document.getElementById('弹窗提示').innerHTML = '请输入密码';
+        document.getElementById('密码输入').value = '';
+        document.getElementById('弹窗错误').innerText = '';
+        document.getElementById('密码弹窗').style.display = 'flex';
     }
 }
 
@@ -201,7 +202,6 @@ async function 弹窗确认() {
     
     try {
         if (弹窗模式 === 'setup') {
-            // 设置密码
             const 昵称 = prompt('请输入你的名字（作为频段创建者）', '创建者') || '创建者';
             const res = await fetch(`${API_BASE}/api/channel/setup`, {
                 method: 'POST',
@@ -211,7 +211,6 @@ async function 弹窗确认() {
             const result = await res.json();
             if (result.success) {
                 已解锁频段[待处理频段] = true;
-                保存解锁状态();
                 document.getElementById('密码弹窗').style.display = 'none';
                 生成频段按钮();
                 进入频段(待处理频段);
@@ -219,7 +218,6 @@ async function 弹窗确认() {
                 document.getElementById('弹窗错误').innerText = result.error || '设置失败';
             }
         } else {
-            // 验证密码
             const res = await fetch(`${API_BASE}/api/channel/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -232,7 +230,6 @@ async function 弹窗确认() {
             const result = await res.json();
             if (result.success) {
                 已解锁频段[待处理频段] = true;
-                保存解锁状态();
                 document.getElementById('密码弹窗').style.display = 'none';
                 生成频段按钮();
                 进入频段(待处理频段);
@@ -246,14 +243,29 @@ async function 弹窗确认() {
     }
 }
 
-// 点击背景关闭弹窗
 document.getElementById('密码弹窗')?.addEventListener('click', function(e) {
     if (e.target === this) this.style.display = 'none';
 });
 
-function 进入频段(频段号) {
+async function 进入频段(频段号) {
     当前频段 = 频段号;
-    document.getElementById('当前频段显示').innerHTML = `频段 ${频段号} 🔓`;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/channel/info`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: 频段号 })
+        });
+        const info = await res.json();
+        if (info.creator) {
+            document.getElementById('当前频段显示').innerHTML = `频段 ${频段号} 🔓 (创建者: ${info.creator})`;
+        } else {
+            document.getElementById('当前频段显示').innerHTML = `频段 ${频段号} 🔓`;
+        }
+    } catch(e) {
+        document.getElementById('当前频段显示').innerHTML = `频段 ${频段号} 🔓`;
+    }
+    
     document.getElementById('留言区').style.display = 'block';
     document.getElementById('昵称').value = '';
     document.getElementById('内容').value = '';
