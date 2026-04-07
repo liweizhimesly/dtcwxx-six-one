@@ -104,25 +104,46 @@ let 待处理频段 = null;
 let 已解锁频段 = {};
 try { const saved = localStorage.getItem('channel_unlocked'); if (saved) 已解锁频段 = JSON.parse(saved); } catch(e) {}
 
-function 保存解锁状态() { localStorage.setItem('channel_unlocked', JSON.stringify(已解锁频段)); }
+//function 保存解锁状态() { localStorage.setItem('channel_unlocked', JSON.stringify(已解锁频段)); }
 
 // 生成频段按钮
-function 生成频段按钮() {
+async function 生成频段按钮() {
     const 容器 = document.getElementById('频段按钮区');
     if (!容器) return;
     容器.innerHTML = '';
+    
     for (let i = 0; i <= 15; i++) {
         const btn = document.createElement('button');
         btn.className = 'channel-btn';
+        
         if (已解锁频段[i]) {
-            btn.textContent = `频段 ${i}`;
+            btn.textContent = `频段 ${i} 🔓`;
             btn.classList.add('active');
+            容器.appendChild(btn);
+            btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
         } else {
-            btn.textContent = `频段 ${i}`;
+            btn.textContent = `频段 ${i} 🔒`;
             btn.classList.add('locked');
+            容器.appendChild(btn);
+            
+            // 异步获取创建者信息并显示
+            (function(chan, button) {
+                fetch(`${API_BASE}/api/channel/info`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel: chan })
+                })
+                .then(res => res.json())
+                .then(info => {
+                    if (info.creator) {
+                        button.innerHTML = `频段 ${chan} 🔒 (${info.creator})`;
+                    }
+                })
+                .catch(e => console.error(e));
+            })(i, btn);
+            
+            btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
         }
-        btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
-        容器.appendChild(btn);
     }
 }
 
