@@ -121,6 +121,9 @@ let 已解锁频段 = {};
 // 频段总数（32个频道：0-31）
 const 最大频段 = 31;
 
+// 存储所有按钮的引用
+const 按钮列表 = [];
+
 // ==================== 加载提示 ====================
 function 显示加载(文字) {
     const 遮罩 = document.getElementById('加载遮罩');
@@ -134,13 +137,36 @@ function 隐藏加载() {
     遮罩.style.display = 'none';
 }
 
-// ==================== 生成频段按钮 ====================
-async function 生成频段按钮() {
+// ==================== 生成频段按钮（立即显示） ====================
+function 生成频段按钮() {
     const 容器 = document.getElementById('频段按钮区');
     if (!容器) return;
     容器.innerHTML = '';
+    按钮列表.length = 0;
     
-    // 并行获取所有频段的创建者信息
+    // 立即创建所有按钮
+    for (let i = 0; i <= 最大频段; i++) {
+        const btn = document.createElement('button');
+        
+        if (已解锁频段[i]) {
+            btn.className = 'channel-btn active';
+        } else {
+            btn.className = 'channel-btn locked';
+        }
+        btn.textContent = `频段 ${i}`;
+        btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
+        容器.appendChild(btn);
+        按钮列表.push(btn);
+    }
+    
+    // 异步加载创建者信息，不阻塞界面
+    加载创建者信息();
+}
+
+// ==================== 异步加载创建者信息 ====================
+async function 加载创建者信息() {
+    // 使用单个请求批量获取所有频段信息会更快，但后端没有批量接口
+    // 这里并行请求，但不阻塞界面
     const promises = [];
     for (let i = 0; i <= 最大频段; i++) {
         promises.push(
@@ -148,30 +174,21 @@ async function 生成频段按钮() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ channel: i })
-            }).then(res => res.json()).catch(() => ({ creator: null }))
+            })
+            .then(res => res.json())
+            .then(info => ({ channel: i, creator: info.creator }))
+            .catch(() => ({ channel: i, creator: null }))
         );
     }
     
-    const infos = await Promise.all(promises);
-    
-    for (let i = 0; i <= 最大频段; i++) {
-        const btn = document.createElement('button');
-        const info = infos[i];
-        
-        if (已解锁频段[i]) {
-            btn.className = 'channel-btn active';
-            btn.textContent = `频段 ${i}`;
-        } else {
-            btn.className = 'channel-btn locked';
-            if (info.creator) {
-                btn.textContent = `频段 ${i} (${info.creator})`;
-            } else {
-                btn.textContent = `频段 ${i}`;
+    // 每返回一个就更新一个按钮
+    for (const promise of promises) {
+        promise.then(({ channel, creator }) => {
+            const btn = 按钮列表[channel];
+            if (btn && creator && !已解锁频段[channel]) {
+                btn.textContent = `频段 ${channel} (${creator})`;
             }
-        }
-        
-        btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
-        容器.appendChild(btn);
+        });
     }
 }
 
@@ -251,7 +268,14 @@ async function 弹窗确认() {
             if (result.success) {
                 已解锁频段[待处理频段] = true;
                 document.getElementById('密码弹窗').style.display = 'none';
-                生成频段按钮();
+                
+                // 更新按钮状态
+                const btn = 按钮列表[待处理频段];
+                if (btn) {
+                    btn.className = 'channel-btn active';
+                    btn.textContent = `频段 ${待处理频段} (${昵称})`;
+                }
+                
                 进入频段(待处理频段);
             } else {
                 document.getElementById('弹窗错误').innerText = result.error || '设置失败';
@@ -264,13 +288,20 @@ async function 弹窗确认() {
             });
             if (res.status === 401 || res.status === 404) {
                 document.getElementById('弹窗错误').innerText = '密码错误！';
+                隐藏加载();
                 return;
             }
             const result = await res.json();
             if (result.success) {
                 已解锁频段[待处理频段] = true;
                 document.getElementById('密码弹窗').style.display = 'none';
-                生成频段按钮();
+                
+                // 更新按钮状态
+                const btn = 按钮列表[待处理频段];
+                if (btn) {
+                    btn.className = 'channel-btn active';
+                }
+                
                 进入频段(待处理频段);
             } else {
                 document.getElementById('弹窗错误').innerText = result.error || '密码错误';
@@ -395,7 +426,7 @@ function escapeHtml(text) {
     return div.innerHTML; 
 }
 
-// 初始化
+// 初始化 - 立即显示按钮
 生成频段按钮();
 </script>
 </body>
