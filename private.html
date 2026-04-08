@@ -307,6 +307,39 @@ document.getElementById('密码弹窗')?.addEventListener('click', function(e) {
     if (e.target === this) this.style.display = 'none';
 });
 
+// ==================== 加载留言 ====================
+async function 加载留言(显示提示 = false) {
+    if (当前频段 === null) return;
+    
+    if (显示提示) {
+        显示加载('正在加载留言...');
+    }
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/channel/messages`, {
+            headers: { 'X-Channel': 当前频段 }
+        });
+        const 列表 = await res.json();
+        const div = document.getElementById('留言列表');
+        if (!列表 || 列表.length === 0) {
+            div.innerHTML = '<div class="empty-messages">✨ 暂无留言，来抢沙发吧 ✨</div>';
+            return;
+        }
+        div.innerHTML = 列表.map(m => {
+            let date = new Date(m.created_at);
+            let dateStr = `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+            return `<div class="message"><div><span class="message-name">${escapeHtml(m.name)}</span><span class="message-time">${dateStr}</span></div><div class="message-content">${escapeHtml(m.content)}</div></div>`;
+        }).join('');
+        div.scrollTop = div.scrollHeight;
+    } catch(e) { 
+        console.error(e);
+    } finally {
+        if (显示提示) {
+            隐藏加载();
+        }
+    }
+}
+
 // ==================== 进入频段 ====================
 async function 进入频段(频段号) {
     当前频段 = 频段号;
@@ -330,36 +363,15 @@ async function 进入频段(频段号) {
     document.getElementById('留言区').style.display = 'block';
     document.getElementById('昵称').value = '';
     document.getElementById('内容').value = '';
-    加载留言();
+    
+    // 首次加载时显示提示
+    加载留言(true);
+    
+    // 设置自动刷新（不显示提示）
     if (自动刷新定时器) clearInterval(自动刷新定时器);
-    自动刷新定时器 = setInterval(() => { if (当前频段 !== null) 加载留言(); }, 1000);
-}
-
-// ==================== 加载留言 ====================
-async function 加载留言() {
-    if (当前频段 === null) return;
-    显示加载('正在加载留言...');
-    try {
-        const res = await fetch(`${API_BASE}/api/channel/messages`, {
-            headers: { 'X-Channel': 当前频段 }
-        });
-        const 列表 = await res.json();
-        const div = document.getElementById('留言列表');
-        if (!列表 || 列表.length === 0) {
-            div.innerHTML = '<div class="empty-messages">✨ 暂无留言，来抢沙发吧 ✨</div>';
-            return;
-        }
-        div.innerHTML = 列表.map(m => {
-            let date = new Date(m.created_at);
-            let dateStr = `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-            return `<div class="message"><div><span class="message-name">${escapeHtml(m.name)}</span><span class="message-time">${dateStr}</span></div><div class="message-content">${escapeHtml(m.content)}</div></div>`;
-        }).join('');
-        div.scrollTop = div.scrollHeight;
-    } catch(e) { 
-        console.error(e);
-    } finally {
-        隐藏加载();
-    }
+    自动刷新定时器 = setInterval(() => { 
+        if (当前频段 !== null) 加载留言(false); 
+    }, 3000);
 }
 
 // ==================== 发送留言 ====================
@@ -384,7 +396,8 @@ async function 发留言() {
         } else {
             document.getElementById('昵称').value = '';
             document.getElementById('内容').value = '';
-            await 加载留言();
+            // 发送后刷新不显示提示
+            await 加载留言(false);
         }
     } catch(e) { 
         alert('网络错误');
