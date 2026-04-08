@@ -13,7 +13,7 @@
         .current-channel-box { background: #1a1a2e; border-radius: 15px; padding: 10px 15px; margin-bottom: 20px; text-align: center; border: 1px solid #4CAF50; }
         .current-channel-label { color: #aaa; font-size: 0.85rem; }
         .current-channel-value { color: #4CAF50; font-size: 1.2rem; font-weight: bold; }
-        .channel-selector { background: #111; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; border: 1px solid #2a2a2a; max-height: 200px; overflow-y: auto; }
+        .channel-selector { background: #111; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; border: 1px solid #2a2a2a; max-height: 300px; overflow-y: auto; }
         .channel-btn { background: #1e1e2f; color: white; border: none; padding: 8px 12px; border-radius: 30px; cursor: pointer; font-size: 0.75rem; transition: all 0.2s; min-width: 80px; }
         .channel-btn.active { background: #4CAF50; }
         .channel-btn.locked { background: #2a2a2a; color: #888; opacity: 0.8; }
@@ -57,7 +57,7 @@
 <body>
 <div class="container">
     <div class="header">
-        <h1>🔒 私密频段 0-15</h1>
+        <h1>🔒 私密频段 0-127</h1>
         <p>第一个进入的人设置密码</p>
     </div>
 
@@ -118,6 +118,9 @@ let 待处理频段 = null;
 // 当前会话已解锁的频段（刷新页面就清空，不保存）
 let 已解锁频段 = {};
 
+// 频段总数
+const 最大频段 = 127;
+
 // ==================== 加载提示 ====================
 function 显示加载(文字) {
     const 遮罩 = document.getElementById('加载遮罩');
@@ -133,7 +136,7 @@ function 隐藏加载() {
 
 // ==================== 清理无密码频段 ====================
 async function 清理所有无密码频段() {
-    for (let i = 0; i <= 15; i++) {
+    for (let i = 0; i <= 最大频段; i++) {
         try {
             const res = await fetch(`${API_BASE}/api/channel/cleanup`, {
                 method: 'POST',
@@ -161,7 +164,7 @@ async function 生成频段按钮() {
     if (!容器) return;
     容器.innerHTML = '';
     
-    for (let i = 0; i <= 15; i++) {
+    for (let i = 0; i <= 最大频段; i++) {
         const btn = document.createElement('button');
         
         if (已解锁频段[i]) {
