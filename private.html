@@ -43,6 +43,14 @@
         .modal-card input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 12px; font-size: 1rem; margin: 10px 0; box-sizing: border-box; }
         .modal-card button { background: #4CAF50; color: white; border: none; padding: 12px 20px; border-radius: 30px; font-size: 1rem; cursor: pointer; width: 100%; }
         .error-msg { color: #f44336; margin-top: 12px; font-size: 0.85rem; }
+        
+        /* 加载遮罩 */
+        .loading-mask { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10001; display: none; align-items: center; justify-content: center; flex-direction: column; }
+        .loading-box { background: white; padding: 25px 35px; border-radius: 20px; text-align: center; }
+        .loading-spinner { font-size: 40px; margin-bottom: 10px; animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .loading-text { font-size: 16px; color: #333; }
+        
         @media (max-width: 550px) { .channel-btn { padding: 6px 10px; min-width: 70px; font-size: 0.7rem; } }
     </style>
 </head>
@@ -81,6 +89,7 @@
     <div class="tip">💡 第一次进入频段需要设置密码，之后凭密码进入（刷新后需重新输入）</div>
 </div>
 
+<!-- 密码弹窗 -->
 <div id="密码弹窗" class="modal" style="display: none;">
     <div class="modal-card">
         <h2 id="弹窗标题">🔐 频段 <span id="弹窗频段号"></span></h2>
@@ -88,6 +97,14 @@
         <input type="password" id="密码输入" placeholder="密码" autocomplete="off">
         <button onclick="弹窗确认()">确认</button>
         <div id="弹窗错误" class="error-msg"></div>
+    </div>
+</div>
+
+<!-- 加载遮罩 -->
+<div id="加载遮罩" class="loading-mask">
+    <div class="loading-box">
+        <div class="loading-spinner">⏳</div>
+        <div id="加载文字" class="loading-text">操作中...</div>
     </div>
 </div>
 
@@ -101,8 +118,45 @@ let 待处理频段 = null;
 // 当前会话已解锁的频段（刷新页面就清空，不保存）
 let 已解锁频段 = {};
 
-// 生成频段按钮
+// ==================== 加载提示 ====================
+function 显示加载(文字) {
+    const 遮罩 = document.getElementById('加载遮罩');
+    const 加载文字 = document.getElementById('加载文字');
+    加载文字.innerText = 文字 || '操作中...';
+    遮罩.style.display = 'flex';
+}
+
+function 隐藏加载() {
+    const 遮罩 = document.getElementById('加载遮罩');
+    遮罩.style.display = 'none';
+}
+
+// ==================== 清理无密码频段 ====================
+async function 清理所有无密码频段() {
+    for (let i = 0; i <= 15; i++) {
+        try {
+            const res = await fetch(`${API_BASE}/api/channel/cleanup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel: i })
+            });
+            const result = await res.json();
+            if (result.action === 'deleted') {
+                console.log(`频段 ${i}: ${result.message}`);
+            }
+        } catch(e) {
+            console.error(`清理频段 ${i} 失败`, e);
+        }
+    }
+}
+
+// ==================== 生成频段按钮 ====================
 async function 生成频段按钮() {
+    // 先清理无密码但有留言的频段
+    显示加载('正在清理...');
+    await 清理所有无密码频段();
+    隐藏加载();
+    
     const 容器 = document.getElementById('频段按钮区');
     if (!容器) return;
     容器.innerHTML = '';
@@ -139,11 +193,14 @@ async function 生成频段按钮() {
     }
 }
 
+// ==================== 选择频段 ====================
 async function 选择频段(频段号) {
     if (已解锁频段[频段号]) {
         进入频段(频段号);
         return;
     }
+    
+    显示加载('正在检查频段...');
     
     try {
         const infoRes = await fetch(`${API_BASE}/api/channel/info`, {
@@ -179,16 +236,14 @@ async function 选择频段(频段号) {
         document.getElementById('弹窗错误').innerText = '';
         document.getElementById('密码弹窗').style.display = 'flex';
     } catch(e) {
-        待处理频段 = 频段号;
-        弹窗模式 = 'verify';
-        document.getElementById('弹窗标题').innerHTML = `🔐 频段 ${频段号}`;
-        document.getElementById('弹窗提示').innerHTML = '请输入密码';
-        document.getElementById('密码输入').value = '';
-        document.getElementById('弹窗错误').innerText = '';
-        document.getElementById('密码弹窗').style.display = 'flex';
+        alert('操作失败，请稍后再试');
+        console.error(e);
+    } finally {
+        隐藏加载();
     }
 }
 
+// ==================== 弹窗确认 ====================
 async function 弹窗确认() {
     const 密码 = document.getElementById('密码输入').value.trim();
     if (!密码) {
@@ -199,6 +254,8 @@ async function 弹窗确认() {
         document.getElementById('弹窗错误').innerText = '密码至少4位';
         return;
     }
+    
+    显示加载(弹窗模式 === 'setup' ? '正在设置密码...' : '正在验证密码...');
     
     try {
         if (弹窗模式 === 'setup') {
@@ -240,13 +297,17 @@ async function 弹窗确认() {
     } catch(e) {
         document.getElementById('弹窗错误').innerText = '操作失败，请稍后再试';
         console.error(e);
+    } finally {
+        隐藏加载();
     }
 }
 
+// 点击背景关闭弹窗
 document.getElementById('密码弹窗')?.addEventListener('click', function(e) {
     if (e.target === this) this.style.display = 'none';
 });
 
+// ==================== 进入频段 ====================
 async function 进入频段(频段号) {
     当前频段 = 频段号;
     
@@ -274,8 +335,10 @@ async function 进入频段(频段号) {
     自动刷新定时器 = setInterval(() => { if (当前频段 !== null) 加载留言(); }, 1000);
 }
 
+// ==================== 加载留言 ====================
 async function 加载留言() {
     if (当前频段 === null) return;
+    显示加载('正在加载留言...');
     try {
         const res = await fetch(`${API_BASE}/api/channel/messages`, {
             headers: { 'X-Channel': 当前频段 }
@@ -292,9 +355,14 @@ async function 加载留言() {
             return `<div class="message"><div><span class="message-name">${escapeHtml(m.name)}</span><span class="message-time">${dateStr}</span></div><div class="message-content">${escapeHtml(m.content)}</div></div>`;
         }).join('');
         div.scrollTop = div.scrollHeight;
-    } catch(e) { console.error(e); }
+    } catch(e) { 
+        console.error(e);
+    } finally {
+        隐藏加载();
+    }
 }
 
+// ==================== 发送留言 ====================
 async function 发留言() {
     if (当前频段 === null) { alert('请先选择一个频段'); return; }
     const 昵称 = document.getElementById('昵称').value.trim();
@@ -302,9 +370,8 @@ async function 发留言() {
     if (!昵称) { alert('请填写名字或学号'); return; }
     if (!内容) { alert('请填写留言内容'); return; }
     
-    const btn = event.target;
-    btn.disabled = true;
-    btn.innerText = '发送中...';
+    显示加载('正在发送留言...');
+    
     try {
         const res = await fetch(`${API_BASE}/api/channel/messages`, {
             method: 'POST',
@@ -312,18 +379,28 @@ async function 发留言() {
             body: JSON.stringify({ name: 昵称, content: 内容, channel: 当前频段 })
         });
         const result = await res.json();
-        if (result.error) alert('发送失败：' + result.error);
-        else {
+        if (result.error) {
+            alert('发送失败：' + result.error);
+        } else {
             document.getElementById('昵称').value = '';
             document.getElementById('内容').value = '';
             await 加载留言();
         }
-    } catch(e) { alert('网络错误'); }
-    finally { btn.disabled = false; btn.innerText = '📨 发送留言'; }
+    } catch(e) { 
+        alert('网络错误');
+    } finally {
+        隐藏加载();
+    }
 }
 
-function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+function escapeHtml(text) { 
+    if (!text) return '';
+    const div = document.createElement('div'); 
+    div.textContent = text; 
+    return div.innerHTML; 
+}
 
+// 初始化
 生成频段按钮();
 </script>
 </body>
