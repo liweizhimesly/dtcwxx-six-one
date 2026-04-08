@@ -137,58 +137,55 @@ function 隐藏加载() {
     遮罩.style.display = 'none';
 }
 
-// ==================== 生成频段按钮（立即显示） ====================
-function 生成频段按钮() {
+// ==================== 创建单个按钮 ====================
+function 创建按钮(频段号) {
+    const 容器 = document.getElementById('频段按钮区');
+    if (!容器) return;
+    
+    const btn = document.createElement('button');
+    
+    if (已解锁频段[频段号]) {
+        btn.className = 'channel-btn active';
+    } else {
+        btn.className = 'channel-btn locked';
+    }
+    btn.textContent = `频段 ${频段号}`;
+    btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(频段号);
+    容器.appendChild(btn);
+    按钮列表[频段号] = btn;
+    
+    // 异步获取创建者信息
+    获取创建者信息(频段号, btn);
+}
+
+// ==================== 获取创建者信息 ====================
+function 获取创建者信息(频段号, btn) {
+    fetch(`${API_BASE}/api/channel/info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: 频段号 })
+    })
+    .then(res => res.json())
+    .then(info => {
+        if (info.creator && btn && !已解锁频段[频段号]) {
+            btn.textContent = `频段 ${频段号} (${info.creator})`;
+        }
+    })
+    .catch(() => {});
+}
+
+// ==================== 逐个生成频段按钮 ====================
+async function 逐个生成频段按钮() {
     const 容器 = document.getElementById('频段按钮区');
     if (!容器) return;
     容器.innerHTML = '';
     按钮列表.length = 0;
     
-    // 立即创建所有按钮
+    // 逐个添加按钮，每个间隔 10ms，让用户能立即看到按钮出现
     for (let i = 0; i <= 最大频段; i++) {
-        const btn = document.createElement('button');
-        
-        if (已解锁频段[i]) {
-            btn.className = 'channel-btn active';
-        } else {
-            btn.className = 'channel-btn locked';
-        }
-        btn.textContent = `频段 ${i}`;
-        btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
-        容器.appendChild(btn);
-        按钮列表.push(btn);
-    }
-    
-    // 异步加载创建者信息，不阻塞界面
-    加载创建者信息();
-}
-
-// ==================== 异步加载创建者信息 ====================
-async function 加载创建者信息() {
-    // 使用单个请求批量获取所有频段信息会更快，但后端没有批量接口
-    // 这里并行请求，但不阻塞界面
-    const promises = [];
-    for (let i = 0; i <= 最大频段; i++) {
-        promises.push(
-            fetch(`${API_BASE}/api/channel/info`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ channel: i })
-            })
-            .then(res => res.json())
-            .then(info => ({ channel: i, creator: info.creator }))
-            .catch(() => ({ channel: i, creator: null }))
-        );
-    }
-    
-    // 每返回一个就更新一个按钮
-    for (const promise of promises) {
-        promise.then(({ channel, creator }) => {
-            const btn = 按钮列表[channel];
-            if (btn && creator && !已解锁频段[channel]) {
-                btn.textContent = `频段 ${channel} (${creator})`;
-            }
-        });
+        创建按钮(i);
+        // 极短的延迟，让浏览器有机会渲染
+        await new Promise(resolve => setTimeout(resolve, 10));
     }
 }
 
@@ -426,8 +423,8 @@ function escapeHtml(text) {
     return div.innerHTML; 
 }
 
-// 初始化 - 立即显示按钮
-生成频段按钮();
+// 初始化 - 逐个显示按钮
+逐个生成频段按钮();
 </script>
 </body>
 </html>
