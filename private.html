@@ -134,64 +134,43 @@ function 隐藏加载() {
     遮罩.style.display = 'none';
 }
 
-// ==================== 清理无密码频段 ====================
-async function 清理所有无密码频段() {
-    for (let i = 0; i <= 最大频段; i++) {
-        try {
-            const res = await fetch(`${API_BASE}/api/channel/cleanup`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ channel: i })
-            });
-            const result = await res.json();
-            if (result.action === 'deleted') {
-                console.log(`频段 ${i}: ${result.message}`);
-            }
-        } catch(e) {
-            console.error(`清理频段 ${i} 失败`, e);
-        }
-    }
-}
-
 // ==================== 生成频段按钮 ====================
 async function 生成频段按钮() {
-    // 先清理无密码但有留言的频段
-    显示加载('正在清理...');
-    await 清理所有无密码频段();
-    隐藏加载();
-    
     const 容器 = document.getElementById('频段按钮区');
     if (!容器) return;
     容器.innerHTML = '';
     
+    // 并行获取所有频段的创建者信息
+    const promises = [];
+    for (let i = 0; i <= 最大频段; i++) {
+        promises.push(
+            fetch(`${API_BASE}/api/channel/info`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel: i })
+            }).then(res => res.json()).catch(() => ({ creator: null }))
+        );
+    }
+    
+    const infos = await Promise.all(promises);
+    
     for (let i = 0; i <= 最大频段; i++) {
         const btn = document.createElement('button');
+        const info = infos[i];
         
         if (已解锁频段[i]) {
             btn.className = 'channel-btn active';
             btn.textContent = `频段 ${i}`;
-            btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
         } else {
             btn.className = 'channel-btn locked';
-            btn.textContent = `频段 ${i}`;
-            btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
-            
-            // 异步获取创建者信息
-            (function(chan, button) {
-                fetch(`${API_BASE}/api/channel/info`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ channel: chan })
-                })
-                .then(res => res.json())
-                .then(info => {
-                    if (info.creator) {
-                        button.innerHTML = `频段 ${chan} (${info.creator})`;
-                    }
-                })
-                .catch(e => console.error(e));
-            })(i, btn);
+            if (info.creator) {
+                btn.textContent = `频段 ${i} (${info.creator})`;
+            } else {
+                btn.textContent = `频段 ${i}`;
+            }
         }
+        
+        btn.onclick = (function(chan) { return function() { 选择频段(chan); }; })(i);
         容器.appendChild(btn);
     }
 }
