@@ -83,36 +83,49 @@
         /* ========== 新增：手机端适配 (不改变原有命名，只增加响应式规则) ========== */
         /* 针对小屏幕 (手机) 最大宽度 768px，同时不影响电脑显示 */
         @media screen and (max-width: 768px) {
-            /* 头部区域调整 */
+            /* ★★★ 重点：标题栏保持并排，不换行 ★★★ */
             .title1 {
                 width: 100%;
                 height: auto;
-                min-height: 80px;
-                padding: 5px 0;
-                flex-wrap: wrap;
+                min-height: 70px;
+                padding: 5px 10px;
+                flex-wrap: nowrap;        /* 禁止换行，保持一行 */
                 align-items: center;
+                justify-content: space-between;
+                box-sizing: border-box;
             }
+            
             .tit {
-                justify-content: center;
-                flex: 1 1 auto;
+                justify-content: flex-start;
+                flex: 0 1 auto;           /* 不强制拉伸 */
+                gap: 5px;
             }
+            
             .tit img {
-                width: 70px;      /* 图片适配手机，不写死高度保持比例 */
+                width: 55px;              /* 手机端适当缩小图片 */
                 height: auto;
+                max-width: 100%;
             }
-            /* 返回首页按钮位置微调：保持绝对定位但适配手机宽度 */
-            .bom {
-                position: static;   /* 手机端取消绝对定位，改为flex内正常流，更易点击 */
-                float: none;
-                margin: 5px 10px 5px auto;
-                width: 90px;
-                height: 45px;
-                line-height: 45px;
-                font-size: 15px;
-            }
+            
+            /* 返回按钮区域 - 保持靠右 */
             .boms {
                 justify-content: flex-end;
-                width: 100%;
+                flex: 0 0 auto;           /* 不拉伸，保持内容宽度 */
+                margin-left: 10px;
+            }
+            
+            /* 返回首页按钮 - 调整尺寸适应手机 */
+            .bom {
+                position: static;          /* 取消绝对定位，用flex布局 */
+                float: none;
+                margin: 0;
+                width: auto;
+                min-width: 75px;
+                height: 40px;
+                line-height: 40px;
+                font-size: 14px;
+                padding: 0 12px;
+                white-space: nowrap;
             }
 
             /* 正文区域文字大小微调 */
@@ -124,47 +137,45 @@
             .ab h2 { font-size: 18px; margin: 5px 0; }
             .ab h3 { font-size: 14px; margin: 5px 0 15px; line-height: 1.4; }
 
-            /* ★★★ 重点：留言卡片 .div — 手机端统一宽度并居中 ★★★ */
+            /* 留言卡片 — 手机端统一宽度并居中 */
             .div {
-                width: 92% !important;        /* 统一宽度，所有卡片一致 */
+                width: 92% !important;
                 max-width: 92% !important;
-                margin: 8px auto !important;  /* 上下8px，左右auto实现居中 */
+                margin: 8px auto !important;
                 padding: 10px 4px;
                 box-sizing: border-box;
                 word-break: break-word;
-                /* 确保所有卡片左右对齐 */
                 display: block;
             }
             
-            /* 留言列表容器 — 确保flex布局下卡片居中 */
+            /* 留言列表容器 */
             #留言列表 {
                 width: 100%;
                 display: flex;
                 flex-direction: column;
-                align-items: center;          /* 子元素（卡片）水平居中 */
+                align-items: center;
                 padding: 0;
             }
             
-            /* 卡片内部文字样式 */
             .hhh {
                 padding: 6px 8px;
                 font-size: 15px;
             }
 
-            /* 表单区域 .form-area — 同样统一宽度并居中 */
+            /* 表单区域 */
             .form-area {
                 width: 92% !important;
                 max-width: 92% !important;
-                margin: 15px auto !important;   /* 上下15px，左右auto居中 */
+                margin: 15px auto !important;
                 padding: 15px 12px;
                 box-sizing: border-box;
             }
             .form-area input, 
             .form-area textarea {
-                width: 100% !important;         /* 填满容器 */
+                width: 100% !important;
                 max-width: 100%;
                 box-sizing: border-box;
-                font-size: 16px;               /* 防止iOS自动缩放 */
+                font-size: 16px;
             }
             .form-area button {
                 width: 100%;
@@ -174,31 +185,31 @@
                 margin-top: 8px;
             }
 
-            /* 保留原有body背景等，仅优化边距 */
             body {
                 padding-bottom: 20px;
             }
 
-            /* 小屏下 .hd 占位调整 */
             .hd { font-size: 8px; height: 5px; }
         }
 
-        /* 更小屏 (如iPhone SE) 进一步优化，依然不改命名 */
+        /* 更小屏 (如iPhone SE) 进一步优化 */
         @media screen and (max-width: 480px) {
             .tit img {
-                width: 60px;
+                width: 45px;              /* 更小屏继续缩小图片 */
             }
+            
             .bom {
-                width: 80px;
-                height: 40px;
-                line-height: 40px;
-                font-size: 14px;
-                margin-right: 8px;
+                min-width: 65px;
+                height: 36px;
+                line-height: 36px;
+                font-size: 13px;
+                padding: 0 8px;
             }
-            .ab h1 { font-size: 22px; }
-            .ab h2 { font-size: 16px; }
+            
+            .ab h1 { font-size: 20px; }
+            .ab h2 { font-size: 15px; }
             .hhh { font-size: 14px; }
-            /* 在小屏上可以稍微调整宽度，但依然保持统一 */
+            
             .div {
                 width: 94% !important;
                 max-width: 94% !important;
@@ -209,35 +220,55 @@
             }
         }
 
-        /* 电脑/大屏下保持原有绝对定位等，不做任何破坏 */
+        /* 极小屏 (如iPhone SE 1代) */
+        @media screen and (max-width: 375px) {
+            .tit img {
+                width: 40px;
+            }
+            
+            .bom {
+                min-width: 60px;
+                height: 32px;
+                line-height: 32px;
+                font-size: 12px;
+                padding: 0 6px;
+            }
+            
+            .title1 {
+                padding: 5px 8px;
+            }
+        }
+
+        /* 电脑/大屏下保持原有样式，不做任何破坏 */
         @media screen and (min-width: 769px) {
-            /* 确保电脑显示完全按照旧版，bom保持绝对定位 */
             .bom {
                 position: absolute;
-                /* 其他属性均已定义，无需重复 */
             }
             .title1 {
-                /* 原有固定宽度，不需修改 */
+                /* 原有固定宽度 */
             }
             .div {
-                width: 500px;   /* 维持原样 */
-                margin: 8px;     /* 维持原有margin */
+                width: 500px;
+                margin: 8px;
             }
             .form-area {
                 width: 500px;
-                margin: 20px 0 20px 10px;  /* 原有外边距 */
+                margin: 20px 0 20px 10px;
             }
-            /* 保证电脑端文字不变化 */
         }
 
-        /* 额外小优化：防止图片变形，但不改命名 */
+        /* 额外小优化 */
         #ddd, .tit img {
             object-fit: contain;
         }
         
-        /* 让返回首页按钮更明显 (不改命名) */
         .bom:hover {
             opacity: 0.85;
+        }
+        
+        /* 确保图片之间有间距 */
+        .tit {
+            gap: 8px;
         }
     </style>
 </head>
@@ -287,7 +318,7 @@ async function 加载留言() {
         }
         div.innerHTML = 列表.map(m => {
             let date = new Date(m.created_at);
-            // 补零函数，保持显示整洁 (原有逻辑保留，仅增加两位数显示)
+            // 补零函数，保持显示整洁
             let month = date.getMonth()+1;
             let day = date.getDate();
             let hours = date.getHours();
@@ -310,7 +341,7 @@ async function 发留言() {
         return;
     }
     
-    // 禁用按钮，防止重复提交 (保留原有逻辑)
+    // 禁用按钮，防止重复提交
     const btn = event.target;
     btn.disabled = true;
     btn.textContent = '发送中...';
@@ -346,15 +377,15 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// 页面加载时自动获取留言 (保留每秒轮询)
+// 页面加载时自动获取留言
 setInterval(加载留言,1000);
 
-// 返回首页按钮 (保留原有跳转)
+// 返回首页按钮
 document.getElementById('b0').onclick = function() {
     window.location.href = 'index.html';
 };
 
-// 初始加载一次，并确保加载过程中不会因为setInterval未触发而空白
+// 初始加载
 加载留言();
 </script>
 </body>
