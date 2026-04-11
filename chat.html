@@ -1,4 +1,354 @@
+这是为您适配手机端并兼顾电脑显示的HTML代码。它保留了您原有的命名规则和功能逻辑，仅通过CSS媒体查询优化了移动端的布局、字体和表单尺寸，确保在不同屏幕下都能良好显示。
+
+```html
 <!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 适配手机端：viewport 设置，同时保留电脑端正常缩放 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>六年一班论坛(非官方个人建)</title>
+    <style>
+        /* ========== 保留全部原有样式（命名/风格） ========== */
+        body { 
+            position: relative; 
+            background-color: black; 
+            margin: 0px; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        .hd { font-size: 10px; }
+        .ab { color: white; padding-left: 10px; }
+        .div { 
+            margin: 8px; 
+            padding: 8px 0px; 
+            width: 500px; 
+            text-align: center; 
+            color: black; 
+            border: 1px solid rgba(0, 0, 0, 0.16); 
+            border-radius: 10px; 
+            background-color: white; 
+        }
+        .hhh { padding: 4px; }
+        .bom { 
+            position: absolute; 
+            font-weight: bold; 
+            top: 0px; 
+            right: 0px; 
+            float: left; 
+            margin: 2px; 
+            padding: 2px 0px; 
+            line-height: 60px; 
+            width: 100px; 
+            height: 60px; 
+            text-align: center; 
+            color: rgb(255, 255, 255); 
+            font-size: 17px; 
+            border: 1px solid rgba(0, 0, 0, 0.16); 
+            border-radius: 10px; 
+            cursor: pointer; 
+            user-select: none; 
+            background-color: #000; 
+        }
+        .tit { display: flex; justify-content: flex-start; }
+        .title1 { 
+            width: 94.84%; 
+            height: 100px; 
+            color: white; 
+            display: flex; 
+            justify-content: space-between; 
+            margin: 0px auto; 
+        }
+        .boms { display: flex; justify-content: flex-end; font-weight: bold; }
+        .form-area { 
+            margin: 20px 0 20px 10px; 
+            width: 500px; 
+            background: white; 
+            padding: 15px; 
+            border-radius: 10px; 
+        }
+        .form-area input, .form-area textarea { 
+            width: 90%; 
+            padding: 8px; 
+            margin: 5px 0; 
+            border-radius: 5px; 
+            border: 1px solid #ccc; 
+        }
+        .form-area button { 
+            background: #4CAF50; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+        }
+
+        /* ========== 新增：手机端适配 (不改变原有命名，只增加响应式规则) ========== */
+        /* 针对小屏幕 (手机) 最大宽度 768px，同时不影响电脑显示 */
+        @media screen and (max-width: 768px) {
+            /* 头部区域调整 */
+            .title1 {
+                width: 100%;
+                height: auto;
+                min-height: 80px;
+                padding: 5px 0;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            .tit {
+                justify-content: center;
+                flex: 1 1 auto;
+            }
+            .tit img {
+                width: 70px;      /* 图片适配手机，不写死高度保持比例 */
+                height: auto;
+            }
+            /* 返回首页按钮位置微调：保持绝对定位但适配手机宽度 */
+            .bom {
+                position: static;   /* 手机端取消绝对定位，改为flex内正常流，更易点击 */
+                float: none;
+                margin: 5px 10px 5px auto;
+                width: 90px;
+                height: 45px;
+                line-height: 45px;
+                font-size: 15px;
+            }
+            .boms {
+                justify-content: flex-end;
+                width: 100%;
+            }
+
+            /* 正文区域文字大小微调 */
+            .ab {
+                padding-left: 12px;
+                padding-right: 8px;
+            }
+            .ab h1 { font-size: 24px; margin: 10px 0 5px; }
+            .ab h2 { font-size: 18px; margin: 5px 0; }
+            .ab h3 { font-size: 14px; margin: 5px 0 15px; line-height: 1.4; }
+
+            /* 留言卡片 .div — 保留原有固定宽度500px？手机下会溢出。
+               采用 max-width 覆盖，但不修改原有命名，只增加媒体查询覆盖宽度 */
+            .div {
+                width: auto !important;        /* 覆盖固定宽度，变为自适应 */
+                max-width: 95%;
+                margin: 8px auto;              /* 居中显示 */
+                padding: 10px 4px;
+                box-sizing: border-box;
+                word-break: break-word;
+            }
+            .hhh {
+                padding: 6px 8px;
+                font-size: 15px;
+            }
+
+            /* 表单区域 .form-area — 同样覆盖宽度，并增加内边距适配 */
+            .form-area {
+                width: auto !important;
+                max-width: 95%;
+                margin: 15px auto !important;   /* 居中，原margin-left:10px在手机上可能偏移 */
+                padding: 15px 12px;
+                box-sizing: border-box;
+            }
+            .form-area input, 
+            .form-area textarea {
+                width: 100% !important;         /* 填满容器，原90%在小屏也OK但为了更好触控 */
+                max-width: 100%;
+                box-sizing: border-box;
+                font-size: 16px;               /* 防止iOS自动缩放 */
+            }
+            .form-area button {
+                width: 100%;
+                padding: 14px 0;
+                font-size: 18px;
+                font-weight: bold;
+                margin-top: 8px;
+            }
+
+            /* 留言列表容器 */
+            #留言列表 {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+
+            /* 保留原有body背景等，仅优化边距 */
+            body {
+                padding-bottom: 20px;
+            }
+
+            /* 小屏下 .hd 占位调整 */
+            .hd { font-size: 8px; height: 5px; }
+        }
+
+        /* 更小屏 (如iPhone SE) 进一步优化，依然不改命名 */
+        @media screen and (max-width: 480px) {
+            .tit img {
+                width: 60px;
+            }
+            .bom {
+                width: 80px;
+                height: 40px;
+                line-height: 40px;
+                font-size: 14px;
+                margin-right: 8px;
+            }
+            .ab h1 { font-size: 22px; }
+            .ab h2 { font-size: 16px; }
+            .hhh { font-size: 14px; }
+        }
+
+        /* 电脑/大屏下保持原有绝对定位等，不做任何破坏 */
+        @media screen and (min-width: 769px) {
+            /* 确保电脑显示完全按照旧版，bom保持绝对定位 */
+            .bom {
+                position: absolute;
+                /* 其他属性均已定义，无需重复 */
+            }
+            .title1 {
+                /* 原有固定宽度，不需修改 */
+            }
+            .div {
+                width: 500px;   /* 维持原样 */
+            }
+            .form-area {
+                width: 500px;
+                margin-left: 10px;  /* 原有左外边距 */
+            }
+            /* 保证电脑端文字不变化 */
+        }
+
+        /* 额外小优化：防止图片变形，但不改命名 */
+        #ddd, .tit img {
+            object-fit: contain;
+        }
+        
+        /* 让返回首页按钮更明显 (不改命名) */
+        .bom:hover {
+            opacity: 0.85;
+        }
+    </style>
+</head>
+<body>
+<div class="hd"><br></div>
+
+<div class="title1">
+    <div class="tit">
+        <img src="class.webp" width="100" alt="class logo">
+        <img src="sbschool.webp" width="100" id="ddd" alt="school logo">
+    </div>
+    <div class="boms">
+        <div class="bom" id="b0">
+            <text>返回首页</text>
+        </div>
+    </div>
+</div>
+
+<div class="ab">
+    <h1>6(1)班 班级论坛</h1>
+    <h2>本论坛提倡友好交流</h2>
+    <h3>直接在下方留言即可，不用申请！加载要2秒左右，要看早的消息往下滑</h3>
+</div>
+
+<!-- 发表留言的表单 (命名与原有完全一致) -->
+<div class="form-area">
+    <input type="text" id="昵称" placeholder="你的名字或学号" style="width: 90%;">
+    <textarea id="内容" placeholder="说点什么..." rows="3" style="width: 90%;"></textarea>
+    <button onclick="发留言()">发送留言</button>
+</div>
+
+<!-- 留言列表会显示在这里 -->
+<div id="留言列表"></div>
+
+<script>
+// ⚠️ 改成你的 PythonAnywhere 地址 （保留原有注释）
+const API = 'https://liweizhimesly.pythonanywhere.com/api/messages';
+
+async function 加载留言() {
+    try {
+        const res = await fetch(API);
+        const 列表 = await res.json();
+        const div = document.getElementById('留言列表');
+        if (列表.length === 0) {
+            div.innerHTML = '<div class="div"><div class="hhh">暂无留言，抢沙发！</div></div>';
+            return;
+        }
+        div.innerHTML = 列表.map(m => {
+            let date = new Date(m.created_at);
+            // 补零函数，保持显示整洁 (原有逻辑保留，仅增加两位数显示)
+            let month = date.getMonth()+1;
+            let day = date.getDate();
+            let hours = date.getHours();
+            let minutes = date.getMinutes();
+            // 格式化为两位数
+            let dateStr = `${date.getFullYear()}/${month<10?'0'+month:month}/${day<10?'0'+day:day} ${hours<10?'0'+hours:hours}:${minutes<10?'0'+minutes:minutes}`;
+            return `<div class="div"><div class="hhh"><strong>${escapeHtml(m.name)}</strong>：${escapeHtml(m.content)}<br><span style="font-size:12px;color:gray;">${dateStr}</span></div></div>`;
+        }).join('');
+    } catch(e) {
+        console.error('加载失败', e);
+        document.getElementById('留言列表').innerHTML = '<div class="div"><div class="hhh">加载留言失败，请稍后再试</div></div>';
+    }
+}
+
+async function 发留言() {
+    const 昵称 = document.getElementById('昵称').value.trim();
+    const 内容 = document.getElementById('内容').value.trim();
+    if (!昵称 || !内容) {
+        alert('请填写昵称和留言内容');
+        return;
+    }
+    
+    // 禁用按钮，防止重复提交 (保留原有逻辑)
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '发送中...';
+    
+    try {
+        const res = await fetch(API, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: 昵称, content: 内容})
+        });
+        const result = await res.json();
+        if (result.error) {
+            alert('发送失败：' + result.error);
+        } else {
+            alert('发送成功！');
+            document.getElementById('昵称').value = '';
+            document.getElementById('内容').value = '';
+            await 加载留言(); // 等待刷新完成
+        }
+    } catch(e) {
+        alert('网络错误，请稍后再试');
+        console.error(e);
+    } finally {
+        // 恢复按钮
+        btn.disabled = false;
+        btn.textContent = '发送留言';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 页面加载时自动获取留言 (保留每秒轮询)
+setInterval(加载留言,1000);
+
+// 返回首页按钮 (保留原有跳转)
+document.getElementById('b0').onclick = function() {
+    window.location.href = 'index.html';
+};
+
+// 初始加载一次，并确保加载过程中不会因为setInterval未触发而空白
+加载留言();
+</script>
+</body>
+</html>
+```<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
