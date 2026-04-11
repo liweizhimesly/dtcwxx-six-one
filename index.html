@@ -3,6 +3,8 @@
 <head>
     <title>芙蓉区大同崇文小学六年一班网站(非官个人建)</title>
     <meta charset="UTF-8" name="msvalidate.01" content="B7B04863D653A25547BB3F461821C8C7" />
+    <!-- 添加viewport适配手机端 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <link rel="icon" href="/favicon.ico">
 </head>
 <div class="hd">
@@ -48,8 +50,10 @@
                 纸质游戏库：展示班级同学自创的课间游戏<br>
                 资源分享：分享学习工具和同学自研的编程项目...（如Iazylang解释器）<br>
                 <h4>技术栈</h4>
-                纯静态网站 (HTML/CSS/JavaScript)<br>
-                托管于 GitHub Pages<br>
+                前端：HTML/CSS/JavaScript (原生开发)<br>
+                后端API：Python Flask (PythonAnywhere托管)<br>
+                数据库：Supabase (PostgreSQL)<br>
+                静态托管：GitHub Pages<br>
                 <h4>特色</h4>
                 完全由学生开发：从设计到代码均由班级同学完成<br>
                 真实班级记忆：论坛内容源自真实的同学互动<br>
@@ -184,10 +188,209 @@
 
         }.div{
             color: white;
+            margin: 8px;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            background-color: rgba(255, 255, 255, 0.05);
         }.ab{
             padding-left: 10px;
         }samp{
             color: white;
+            padding: 10px;
+            line-height: 1.6;
+        }
+        
+        .hhh {
+            padding: 10px;
+            line-height: 1.6;
+        }
+        
+        /* ========== 手机端适配 (保持原有命名规则) ========== */
+        @media screen and (max-width: 768px) {
+            /* 标题栏适配 */
+            .title1 {
+                width: 100%;
+                height: auto;
+                min-height: 70px;
+                padding: 5px 8px;
+                flex-wrap: wrap;      /* 手机端允许换行 */
+                align-items: center;
+                box-sizing: border-box;
+            }
+            
+            .tit {
+                justify-content: flex-start;
+                flex: 0 1 auto;
+                gap: 5px;
+            }
+            
+            .tit img {
+                width: 50px;          /* 手机端缩小图标 */
+                height: auto;
+            }
+            
+            /* 按钮组适配 */
+            .boms {
+                justify-content: flex-start;
+                flex-wrap: wrap;
+                width: 100%;
+                margin-top: 8px;
+                gap: 4px;
+            }
+            
+            .bom {
+                float: none;
+                margin: 2px;
+                padding: 0 8px;
+                line-height: 36px;
+                width: auto;
+                min-width: 70px;
+                height: 36px;
+                font-size: 13px;
+                white-space: nowrap;
+            }
+            
+            /* 标题文字 */
+            .ab {
+                padding-left: 12px;
+                padding-right: 8px;
+            }
+            
+            h1 {
+                font-size: 24px;
+                margin: 15px 0 10px;
+            }
+            
+            /* 公告卡片适配 */
+            .div {
+                width: auto;
+                max-width: 95%;
+                margin: 10px auto;
+                padding: 12px;
+                box-sizing: border-box;
+            }
+            
+            .hhh {
+                padding: 5px;
+                font-size: 14px;
+            }
+            
+            .hhh h3 {
+                font-size: 18px;
+                margin: 10px 0;
+            }
+            
+            .hhh h4 {
+                font-size: 16px;
+                margin: 12px 0 5px;
+            }
+            
+            /* 制作人员信息 */
+            samp {
+                display: block;
+                padding: 15px;
+                font-size: 13px;
+                margin-bottom: 60px;
+            }
+            
+            /* 底部彩蛋 */
+            .eatshit {
+                font-size: 12px;
+                padding: 10px;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                background: rgba(0, 0, 0, 0.7);
+                width: 100%;
+                text-align: center;
+                z-index: 100;
+            }
+            
+            /* 底部留空 */
+            br {
+                display: none;
+            }
+        }
+        
+        /* 更小屏幕适配 */
+        @media screen and (max-width: 480px) {
+            .tit img {
+                width: 40px;
+            }
+            
+            .bom {
+                min-width: 60px;
+                height: 32px;
+                line-height: 32px;
+                font-size: 12px;
+                padding: 0 6px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            .hhh {
+                font-size: 13px;
+            }
+            
+            .hhh h3 {
+                font-size: 16px;
+            }
+            
+            .hhh h4 {
+                font-size: 14px;
+            }
+            
+            samp {
+                font-size: 12px;
+            }
+        }
+        
+        /* 极小屏 */
+        @media screen and (max-width: 375px) {
+            .tit img {
+                width: 35px;
+            }
+            
+            .bom {
+                min-width: 55px;
+                height: 30px;
+                line-height: 30px;
+                font-size: 11px;
+                padding: 0 4px;
+            }
+            
+            .boms {
+                gap: 2px;
+            }
+        }
+        
+        /* 电脑端保持原有样式 */
+        @media screen and (min-width: 769px) {
+            .title1 {
+                /* 保持原有样式 */
+            }
+            
+            .bom {
+                /* 保持原有样式 */
+            }
+            
+            .div {
+                max-width: 800px;
+            }
+        }
+        
+        /* 按钮悬停效果 */
+        .bom:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: 0.2s;
+        }
+        
+        /* 图片优化 */
+        .tit img {
+            object-fit: contain;
         }
     </style>
     <script>
@@ -236,7 +439,3 @@
     </script>
 
 </body>
-
-
-
-
