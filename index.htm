@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>音频裁剪+渐变播放</title>
+</head>
+<body>
+    <button onclick="play()">播放 m → a</button>
+    <div id="status"></div>
+
+    <script>
+        let ctx = null;
+        let anim = null;
+
+        async function play() {
+            if (ctx) await ctx.close();
+            if (anim) cancelAnimationFrame(anim);
+            
+            const status = document.getElementById('status');
+            status.innerText = '加载中...';
+            
+            try {
+                ctx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // 创建 audio 元素加载文件
+                const audioM = new Audio('m.mp3');
+                const audioA = new Audio('a.mp3');
+                
+                await Promise.all([
+                    new Promise((r, e) => { audioM.oncanplaythrough = r; audioM.onerror = e; }),
+                    new Promise((r, e) => { audioA.oncanplaythrough = r; audioA.onerror = e; })
+                ]);
+                
+                // 获取音频数据并裁剪
+                const [bufM, bufA] = await Promise.all([
+                    fetch(audioM.src).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)),
+                    fetch(audioA.src).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b))
+                ]);
+                
+                const sampleRate = bufM.sampleRate;
+                const fadeSamples = Math.floor(sampleRate * 0.2); // 200ms
+                
+                // 裁剪 m：删除后 200ms
+                const trimmedM = ctx.createBuffer(1, bufM.length - fadeSamples, sampleRate);
+                const mData = bufM.getChannelData(0);
+                const mTrim = trimmedM.getChannelData(0);
+                for (let i = 0; i < trimmedM.length; i++) mTrim[i] = mData[i];
+                
+                // 裁剪 a：删除前 200ms
+                const trimmedA = ctx.createBuffer(1, bufA.length - fadeSamples, sampleRate);
+                const aData = bufA.getChannelData(0);
+                const aTrim = trimmedA.getChannelData(0);
+                for (let i = 0; i < trimmedA.length; i++) aTrim[i] = aData[i + fadeSamples];
+                
+                await ctx.resume();
+                
+                // 创建音源和增益
+                const sourceM = ctx.createBufferSource();
+                const sourceA = ctx.createBufferSource();
+                const gainM = ctx.createGain();
+                const gainA = ctx.createGain();
+                
+                sourceM.buffer = trimmedM;
+                sourceA.buffer = trimmedA;
+                sourceM.connect(gainM).connect(ctx.destination);
+                sourceA.connect(gainA).connect(ctx.destination);
+                
+                gainM.gain.value = 1;
+                gainA.gain.value = 0;
+                
+                const durationM = trimmedM.duration;
+                const fadeStart = durationM - 0.2;
+                
+                sourceM.start();
+                sourceA.start(ctx.currentTime + fadeStart);
+                
+                status.innerText = '播放中...';
+                
+                // 渐变更新
+                const startTime = ctx.currentTime;
+                function update() {
+                    const now = ctx.currentTime - startTime;
+                    if (now >= fadeStart && now < durationM) {
+                        const p = (now - fadeStart) / 0.2;
+                        gainM.gain.value = 1 - p;
+                        gainA.gain.value = p;
+                        anim = requestAnimationFrame(update);
+                    } else if (now >= durationM) {
+                        gainA.gain.value = 1;
+                        status.innerText = '播放完成';
+                        cancelAnimationFrame(anim);
+                        anim = null;
+                    } else {
+                        anim = requestAnimationFrame(update);
+                    }
+                }
+                update();
+                
+                sourceM.onended = () => { if (!anim) status.innerText = '播放完成'; };
+                
+            } catch(e) {
+                console.error(e);
+                status.innerText = '加载失败，请用 http:// 打开此页面';
+            }
+        }
+    </script>
+</body>
+</html>
