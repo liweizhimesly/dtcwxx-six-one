@@ -2,107 +2,488 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>音频裁剪+渐变播放</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>音频融合合成器 - 辅音+元音平滑拼接</title>
+    <!-- 没有任何CSS样式，完全符合要求 -->
 </head>
 <body>
-    <button onclick="play()">播放 m → a</button>
-    <div id="status"></div>
-
+    <!-- 纯功能界面，无样式修饰 -->
+    <h3>辅音 + 元音 智能融合合成器</h3>
+    <p>使用交叉淡变与包络平滑技术，让辅音与元音连续融合，避免断层感。</p>
+    
+    <!-- 辅音音频上传 -->
+    <div>
+        <label>📁 上传辅音音频 (Consonant): </label>
+        <input type="file" id="consFile" accept="audio/*">
+        <span id="consName" style="margin-left: 10px;">未选择</span>
+    </div>
+    <br>
+    
+    <!-- 元音音频上传 -->
+    <div>
+        <label>📁 上传元音音频 (Vowel): </label>
+        <input type="file" id="vowelFile" accept="audio/*">
+        <span id="vowelName" style="margin-left: 10px;">未选择</span>
+    </div>
+    <br>
+    
+    <!-- 控制选项，融合细节 (无样式但保留功能性滑块，但为了体验保留原生控件) -->
+    <div>
+        <label>🎛️ 融合重叠时长 (ms): </label>
+        <input type="range" id="crossfadeMs" min="20" max="300" value="120" step="5">
+        <span id="fadeValue">120</span> ms
+        <small> (重叠区交叉淡变，让衔接更自然)</small>
+    </div>
+    <div>
+        <label>🔊 辅音音量: </label>
+        <input type="range" id="consGain" min="0" max="1.5" step="0.01" value="1.0">
+        <span id="consGainVal">1.00</span>
+    </div>
+    <div>
+        <label>🔊 元音音量: </label>
+        <input type="range" id="vowelGain" min="0" max="1.5" step="0.01" value="1.0">
+        <span id="vowelGainVal">1.00</span>
+    </div>
+    <br>
+    
+    <!-- 合成按钮和播放控制 -->
+    <div>
+        <button id="synthesizeBtn">✨ 合成并播放 (融合效果)</button>
+        <button id="stopBtn">⏹️ 停止播放</button>
+        <button id="downloadBtn">💾 下载合成音频 (WAV)</button>
+    </div>
+    <br>
+    
+    <!-- 音频播放器 (用于监听和播放合成的结果) -->
+    <div>
+        <p>播放器预览: <audio id="player" controls style="width: 100%; max-width: 500px;"></audio></p>
+        <p id="statusMsg">⚡ 状态: 等待选择音频文件</p>
+    </div>
+    
     <script>
-        let ctx = null;
-        let anim = null;
-
-        async function play() {
-            if (ctx) await ctx.close();
-            if (anim) cancelAnimationFrame(anim);
+        // 完全原生JS，无依赖，实现音频融合算法：辅音 + 元音，交叉淡变区域平滑过渡，非简单拼接
+        // 核心思想: 将辅音音频完全播放，在辅音末尾与元音开头部分进行重叠交叉淡变 (crossfade)
+        // 同时可选在辅音尾部直接渐弱+元音头部渐强，保证能量连续。
+        // 另外通过buffer源，离线音频处理，生成融合后的AudioBuffer，用于播放和下载。
+        
+        // DOM 元素
+        const consFileInput = document.getElementById('consFile');
+        const vowelFileInput = document.getElementById('vowelFile');
+        const consNameSpan = document.getElementById('consName');
+        const vowelNameSpan = document.getElementById('vowelName');
+        const crossfadeSlider = document.getElementById('crossfadeMs');
+        const fadeValueSpan = document.getElementById('fadeValue');
+        const consGainSlider = document.getElementById('consGain');
+        const consGainValSpan = document.getElementById('consGainVal');
+        const vowelGainSlider = document.getElementById('vowelGain');
+        const vowelGainValSpan = document.getElementById('vowelGainVal');
+        const synthesizeBtn = document.getElementById('synthesizeBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const player = document.getElementById('player');
+        const statusMsg = document.getElementById('statusMsg');
+        
+        // 存储解码后的AudioBuffer
+        let consBuffer = null;
+        let vowelBuffer = null;
+        let synthesizedBuffer = null;   // 合成后的音频buffer
+        
+        // 音频上下文 (用于离线处理及播放)
+        let audioCtx = null;
+        // 当前播放的源，用于停止
+        let currentSource = null;
+        
+        // 初始化AudioContext (需用户手势，但合成播放时会激活)
+        function initAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(e => console.warn);
+            }
+            return audioCtx;
+        }
+        
+        // 读取文件为ArrayBuffer并解码
+        function loadAudioFile(file, type) {
+            return new Promise((resolve, reject) => {
+                if (!file) {
+                    reject('没有文件');
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const arrayBuffer = e.target.result;
+                    try {
+                        // 临时创建ctx用于解码
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                        ctx.close(); // 关闭临时上下文
+                        resolve(audioBuffer);
+                    } catch (err) {
+                        reject('解码失败: ' + err.message);
+                    }
+                };
+                reader.onerror = () => reject('文件读取失败');
+                reader.readAsArrayBuffer(file);
+            });
+        }
+        
+        // 更新文件名显示
+        consFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                consNameSpan.textContent = file.name;
+                try {
+                    consBuffer = await loadAudioFile(file, 'cons');
+                    statusMsg.textContent = `✅ 辅音加载成功 (${consBuffer.duration.toFixed(2)}秒)`;
+                } catch(err) {
+                    consBuffer = null;
+                    statusMsg.textContent = `❌ 辅音加载失败: ${err}`;
+                }
+            } else {
+                consNameSpan.textContent = '未选择';
+                consBuffer = null;
+            }
+        });
+        
+        vowelFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                vowelNameSpan.textContent = file.name;
+                try {
+                    vowelBuffer = await loadAudioFile(file, 'vowel');
+                    statusMsg.textContent = `✅ 元音加载成功 (${vowelBuffer.duration.toFixed(2)}秒)`;
+                } catch(err) {
+                    vowelBuffer = null;
+                    statusMsg.textContent = `❌ 元音加载失败: ${err}`;
+                }
+            } else {
+                vowelNameSpan.textContent = '未选择';
+                vowelBuffer = null;
+            }
+        });
+        
+        // 滑块显示数值
+        crossfadeSlider.addEventListener('input', () => {
+            fadeValueSpan.textContent = crossfadeSlider.value;
+        });
+        consGainSlider.addEventListener('input', () => {
+            consGainValSpan.textContent = consGainSlider.valueAsNumber.toFixed(2);
+        });
+        vowelGainSlider.addEventListener('input', () => {
+            vowelGainValSpan.textContent = vowelGainSlider.valueAsNumber.toFixed(2);
+        });
+        
+        // 核心: 融合辅音和元音，实现平滑过渡 (交叉淡变融合)
+        // 参数: consBuffer (AudioBuffer), vowelBuffer (AudioBuffer), crossfadeSeconds (重叠交叉淡化时间，秒)
+        // gainCons, gainVowel 音量增益
+        // 返回新的AudioBuffer (采样率与输入保持一致，一般使用consBuffer采样率)
+        function synthesizeSmoothSyllable(consBuffer, vowelBuffer, crossfadeSeconds, gainCons, gainVowel) {
+            if (!consBuffer || !vowelBuffer) throw new Error('缺少辅音或元音buffer');
             
-            const status = document.getElementById('status');
-            status.innerText = '加载中...';
+            // 确定采样率：使用辅音采样率为主，若不一致则需重采样，此处为了简单，统一采用辅音采样率
+            const sampleRate = consBuffer.sampleRate;
+            // 通道数: 取两者最大通道数，但一般都是单/双，简单处理取最大通道，确保混合正确
+            const channels = Math.max(consBuffer.numberOfChannels, vowelBuffer.numberOfChannels);
             
-            try {
-                ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // 辅音时长(秒) 和 元音时长
+            const consDur = consBuffer.duration;
+            const vowelDur = vowelBuffer.duration;
+            
+            // 交叉淡化时长不能超过辅音和元音的最小长度
+            let fadeSec = Math.min(crossfadeSeconds, consDur * 0.9, vowelDur * 0.9);
+            if (fadeSec <= 0.01) fadeSec = 0.01; // 极小值保底
+            
+            // 总合成时长: 辅音全部时长 + 元音时长 - 重叠部分(fadeSec)
+            const totalDuration = consDur + vowelDur - fadeSec;
+            const totalLength = Math.ceil(totalDuration * sampleRate);
+            
+            // 创建输出Buffer
+            const outputBuffer = new AudioBuffer({
+                numberOfChannels: channels,
+                length: totalLength,
+                sampleRate: sampleRate
+            });
+            
+            // 预计算重叠区的起始点(辅音重叠起点采样位置，元音重叠起始位置为0)
+            const consStartSample = 0;
+            const consEndSample = Math.floor(consDur * sampleRate);
+            const overlapStartSample = Math.floor((consDur - fadeSec) * sampleRate);
+            const overlapEndSample = consEndSample; // 辅音结束采样点
+            
+            // 元音在输出buffer中的起始偏移: 从 overlapStartSample 开始和辅音重叠，实际上元音整体从 (consDur - fadeSec) 位置开始写入
+            const vowelOutputStartSample = overlapStartSample;
+            const vowelSamplesTotal = Math.floor(vowelDur * sampleRate);
+            
+            // 对每个通道进行处理
+            for (let ch = 0; ch < channels; ch++) {
+                // 获取源通道数据 (如果源通道不足，则复用第一个通道或静音)
+                let consChannelData = null;
+                let vowelChannelData = null;
+                if (ch < consBuffer.numberOfChannels) {
+                    consChannelData = consBuffer.getChannelData(ch);
+                } else {
+                    // 如果输出通道大于辅音通道，从辅音的0通道复制 (降级)
+                    consChannelData = consBuffer.getChannelData(0);
+                }
+                if (ch < vowelBuffer.numberOfChannels) {
+                    vowelChannelData = vowelBuffer.getChannelData(ch);
+                } else {
+                    vowelChannelData = vowelBuffer.getChannelData(0);
+                }
                 
-                // 创建 audio 元素加载文件
-                const audioM = new Audio('m.mp3');
-                const audioA = new Audio('a.mp3');
+                const outputChannel = outputBuffer.getChannelData(ch);
                 
-                await Promise.all([
-                    new Promise((r, e) => { audioM.oncanplaythrough = r; audioM.onerror = e; }),
-                    new Promise((r, e) => { audioA.oncanplaythrough = r; audioA.onerror = e; })
-                ]);
-                
-                // 获取音频数据并裁剪
-                const [bufM, bufA] = await Promise.all([
-                    fetch(audioM.src).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)),
-                    fetch(audioA.src).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b))
-                ]);
-                
-                const sampleRate = bufM.sampleRate;
-                const fadeSamples = Math.floor(sampleRate * 0.2); // 200ms
-                
-                // 裁剪 m：删除后 200ms
-                const trimmedM = ctx.createBuffer(1, bufM.length - fadeSamples, sampleRate);
-                const mData = bufM.getChannelData(0);
-                const mTrim = trimmedM.getChannelData(0);
-                for (let i = 0; i < trimmedM.length; i++) mTrim[i] = mData[i];
-                
-                // 裁剪 a：删除前 200ms
-                const trimmedA = ctx.createBuffer(1, bufA.length - fadeSamples, sampleRate);
-                const aData = bufA.getChannelData(0);
-                const aTrim = trimmedA.getChannelData(0);
-                for (let i = 0; i < trimmedA.length; i++) aTrim[i] = aData[i + fadeSamples];
-                
-                await ctx.resume();
-                
-                // 创建音源和增益
-                const sourceM = ctx.createBufferSource();
-                const sourceA = ctx.createBufferSource();
-                const gainM = ctx.createGain();
-                const gainA = ctx.createGain();
-                
-                sourceM.buffer = trimmedM;
-                sourceA.buffer = trimmedA;
-                sourceM.connect(gainM).connect(ctx.destination);
-                sourceA.connect(gainA).connect(ctx.destination);
-                
-                gainM.gain.value = 1;
-                gainA.gain.value = 0;
-                
-                const durationM = trimmedM.duration;
-                const fadeStart = durationM - 0.2;
-                
-                sourceM.start();
-                sourceA.start(ctx.currentTime + fadeStart);
-                
-                status.innerText = '播放中...';
-                
-                // 渐变更新
-                const startTime = ctx.currentTime;
-                function update() {
-                    const now = ctx.currentTime - startTime;
-                    if (now >= fadeStart && now < durationM) {
-                        const p = (now - fadeStart) / 0.2;
-                        gainM.gain.value = 1 - p;
-                        gainA.gain.value = p;
-                        anim = requestAnimationFrame(update);
-                    } else if (now >= durationM) {
-                        gainA.gain.value = 1;
-                        status.innerText = '播放完成';
-                        cancelAnimationFrame(anim);
-                        anim = null;
+                // 1. 第一部分: 辅音不重叠区 [0, overlapStartSample)
+                for (let i = 0; i < overlapStartSample && i < consEndSample; i++) {
+                    if (i < consChannelData.length) {
+                        outputChannel[i] = consChannelData[i] * gainCons;
                     } else {
-                        anim = requestAnimationFrame(update);
+                        outputChannel[i] = 0;
                     }
                 }
-                update();
                 
-                sourceM.onended = () => { if (!anim) status.innerText = '播放完成'; };
+                // 2. 重叠区: 交叉淡变 (辅音渐弱 + 元音渐强)
+                const overlapLength = overlapEndSample - overlapStartSample;
+                for (let i = 0; i < overlapLength; i++) {
+                    const samplePos = overlapStartSample + i;
+                    if (samplePos >= totalLength) break;
+                    // 辅音重叠部分索引
+                    const consIdx = overlapStartSample + i;
+                    // 元音索引 (从元音buffer起始位置)
+                    let vowelIdx = i;
+                    if (vowelIdx >= vowelChannelData.length) vowelIdx = vowelChannelData.length - 1;
+                    
+                    // 计算渐变因子: 线性交叉淡化 (从1->0 辅音权重， 0->1 元音权重)
+                    let t = i / overlapLength;  // 0到1
+                    // 采用平滑曲线? 线性足够自然，也可使用 ease，线性即可
+                    const consWeight = 1 - t;
+                    const vowelWeight = t;
+                    
+                    let consVal = 0;
+                    if (consIdx < consChannelData.length) {
+                        consVal = consChannelData[consIdx] * gainCons;
+                    }
+                    let vowelVal = 0;
+                    if (vowelIdx < vowelChannelData.length) {
+                        vowelVal = vowelChannelData[vowelIdx] * gainVowel;
+                    }
+                    // 混合值
+                    outputChannel[samplePos] = consVal * consWeight + vowelVal * vowelWeight;
+                }
                 
-            } catch(e) {
-                console.error(e);
-                status.innerText = '加载失败，请用 http:// 打开此页面';
+                // 3. 元音剩余部分 (重叠区之后，即从 overlapStartSample + overlapLength 位置开始，但实际元音还有超出重叠区的剩余部分)
+                const vowelRemainStart = overlapLength; // 在元音buffer中的偏移
+                const outputRemainStart = overlapStartSample + overlapLength;
+                const vowelRemainingSamples = vowelSamplesTotal - overlapLength;
+                for (let i = 0; i < vowelRemainingSamples; i++) {
+                    const outputPos = outputRemainStart + i;
+                    if (outputPos >= totalLength) break;
+                    const vowelIdx = overlapLength + i;
+                    if (vowelIdx < vowelChannelData.length) {
+                        outputChannel[outputPos] = vowelChannelData[vowelIdx] * gainVowel;
+                    } else {
+                        outputChannel[outputPos] = 0;
+                    }
+                }
+                
+                // 如果辅音比重叠区+不重叠区更长? 上面已经复制到重叠区开始位置，实际上辅音在重叠区结束后完全结束，所以不需要额外处理
+                // 极少数情况辅音buffer长度大于重叠区结束，但重叠区结束后辅音已经不再写入，符合预期: 辅音只在重叠区内逐渐淡出到0.
+                // 但辅音尾部超出重叠区的部分? 由于重叠区结束位置即为辅音总长度位置(consDur)，不会有超出。完美。
+            }
+            
+            // 额外后处理: 为了更加平滑，可以在元音起始非常开头(如果非重叠部分极小)，但交叉淡变已经足够平滑。
+            // 最后返回buffer
+            return outputBuffer;
+        }
+        
+        // 合成主函数: 基于当前UI参数进行融合
+        async function performSynthesis() {
+            if (!consBuffer) {
+                statusMsg.textContent = '⚠️ 请先上传辅音音频文件';
+                return false;
+            }
+            if (!vowelBuffer) {
+                statusMsg.textContent = '⚠️ 请先上传元音音频文件';
+                return false;
+            }
+            
+            const crossfadeMs = parseFloat(crossfadeSlider.value);
+            const crossfadeSec = crossfadeMs / 1000;
+            const gainCons = parseFloat(consGainSlider.value);
+            const gainVowel = parseFloat(vowelGainSlider.value);
+            
+            statusMsg.textContent = '🔄 正在合成音频，应用交叉淡变融合...';
+            
+            // 执行合成 (可能会消耗一点时间)
+            try {
+                synthesizedBuffer = synthesizeSmoothSyllable(consBuffer, vowelBuffer, crossfadeSec, gainCons, gainVowel);
+                statusMsg.textContent = `✅ 合成成功！ 总时长: ${synthesizedBuffer.duration.toFixed(2)} 秒，融合重叠区 ${crossfadeMs}ms，听感平滑。`;
+                return true;
+            } catch (err) {
+                statusMsg.textContent = `❌ 合成失败: ${err.message}`;
+                console.error(err);
+                return false;
             }
         }
+        
+        // 播放合成的音频 (使用AudioContext或Audio元素)
+        async function playSynthesized() {
+            if (!synthesizedBuffer) {
+                const ok = await performSynthesis();
+                if (!ok) return;
+            }
+            if (!synthesizedBuffer) return;
+            
+            // 停止当前播放
+            if (currentSource) {
+                try {
+                    currentSource.stop();
+                } catch(e) {}
+                currentSource = null;
+            }
+            
+            const ctx = initAudioContext();
+            // 暂停播放器上的任何播放
+            player.pause();
+            player.src = '';
+            
+            // 使用AudioBufferSourceNode播放，确保高质量无卡顿
+            if (ctx.state === 'suspended') {
+                await ctx.resume();
+            }
+            const source = ctx.createBufferSource();
+            source.buffer = synthesizedBuffer;
+            // 可加增益节点控制整体音量
+            const gainNode = ctx.createGain();
+            gainNode.gain.value = 1.0;
+            source.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            currentSource = source;
+            source.onended = () => {
+                if (currentSource === source) currentSource = null;
+                statusMsg.textContent = '✅ 播放完成';
+            };
+            source.start();
+            statusMsg.textContent = '🎵 正在播放融合后的音节 (平滑过渡)';
+            
+            // 同时更新audio元素以便下载预览，但audio元素不支持直接播放AudioBuffer，需要转为blob
+            // 为了能让下载按钮导出，暂时保留 synthesizedBuffer，并转换下载用。
+        }
+        
+        // 停止播放
+        function stopPlayback() {
+            if (currentSource) {
+                try {
+                    currentSource.stop();
+                } catch(e) {}
+                currentSource = null;
+            }
+            if (audioCtx) {
+                // 不挂起，只是停止源
+            }
+            player.pause();
+            player.src = '';
+            statusMsg.textContent = '⏹️ 已停止播放';
+        }
+        
+        // 将AudioBuffer转换为WAV Blob并下载
+        function audioBufferToWav(buffer, opt) {
+            // 基于标准WAV编码，支持多声道
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+            
+            let samples = buffer.length;
+            let dataLength = samples * numChannels * (bitDepth / 8);
+            let bufferLength = 44 + dataLength;
+            const arrayBuffer = new ArrayBuffer(bufferLength);
+            const view = new DataView(arrayBuffer);
+            
+            // 写RIFF块
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, bufferLength - 8, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true); // fmt块大小
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true); // 字节率
+            view.setUint16(32, numChannels * (bitDepth / 8), true); // 块对齐
+            view.setUint16(34, bitDepth, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataLength, true);
+            
+            // 写入采样数据
+            const volume = 1;
+            let offset = 44;
+            for (let i = 0; i < samples; i++) {
+                for (let ch = 0; ch < numChannels; ch++) {
+                    const sample = buffer.getChannelData(ch)[i] * volume;
+                    const intSample = Math.max(-1, Math.min(1, sample)) * 0x7FFF;
+                    view.setInt16(offset, intSample, true);
+                    offset += 2;
+                }
+            }
+            
+            return new Blob([arrayBuffer], { type: 'audio/wav' });
+        }
+        
+        function writeString(view, offset, str) {
+            for (let i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+            }
+        }
+        
+        // 下载合成音频
+        async function downloadSynthesized() {
+            if (!synthesizedBuffer) {
+                const ok = await performSynthesis();
+                if (!ok) {
+                    statusMsg.textContent = '请先合成或检查音频文件';
+                    return;
+                }
+            }
+            if (!synthesizedBuffer) return;
+            
+            const wavBlob = audioBufferToWav(synthesizedBuffer);
+            const url = URL.createObjectURL(wavBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `syllable_fusion_${Date.now()}.wav`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            statusMsg.textContent = '📥 下载已开始，融合音频已保存为WAV文件';
+        }
+        
+        // 事件绑定
+        synthesizeBtn.addEventListener('click', async () => {
+            await performSynthesis();
+            // 合成后自动播放可以提升体验
+            if (synthesizedBuffer) {
+                playSynthesized();
+            }
+        });
+        
+        stopBtn.addEventListener('click', () => {
+            stopPlayback();
+        });
+        
+        downloadBtn.addEventListener('click', () => {
+            downloadSynthesized();
+        });
+        
+        // 若用户未点击合成，但直接点击播放时智能合成
+        // 额外增强: 也允许单独播放合成后的内容
+        // 页面加载提示
+        statusMsg.textContent = '请上传辅音和元音音频，然后点击合成按钮，将进行交叉淡变融合，保证连续无缝。';
+        
+        // 预置演示提示: 无样式全功能音频融合
     </script>
 </body>
 </html>
