@@ -2,27 +2,44 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>变调速率序列音频播放器 | 真·变速不变调引擎</title>
+    <title>变调速率序列音频播放器 | 真·实时变速变调引擎</title>
     <style>
-        /* 极简命令行风格，无多余样式 */
-        body { font-family: monospace; margin: 20px; background: #fff; }
+        body { font-family: monospace; margin: 20px; background: #fff; max-width: 1000px; }
         textarea, input, button { font-family: monospace; font-size: 14px; }
         #status { border: 1px solid #ccc; padding: 8px; min-height: 140px; overflow-y: auto; max-height: 280px; background: #fefefe; }
         .file-list { border: 1px solid #ccc; padding: 8px; min-height: 60px; max-height: 150px; overflow-y: auto; background: #f9f9f9; }
-        button { cursor: pointer; }
+        button { cursor: pointer; margin-right: 5px; }
+        .param-panel { margin: 10px 0; padding: 10px; background: #f0f0f0; border: 1px solid #ddd; }
+        .param-panel label { margin-right: 15px; }
+        input[type="range"] { width: 150px; }
+        .test-section { margin: 10px 0; padding: 10px; background: #e8f4f8; border: 1px solid #bce4f0; }
     </style>
 </head>
 <body>
-    <h1>🎛️ 变调速率序列音频播放器 | 自包含引擎</h1>
-    <p><strong>语法：</strong> <code>文件名:音高偏移@速度系数</code><br>
-    ▪ <code>a:0@1.0</code> 原速原调<br>
-    ▪ <code>a:+5@1.0</code> <strong>变调不变速</strong> (音高升5半音，时长不变)<br>
-    ▪ <code>a:0@0.8</code> <strong>变速不变调</strong> (速度慢20%，音高不变)<br>
-    ▪ <code>a:+3@1.5</code> 同时变调+变速<br>
-    ▪ <code>a:0to5@1.0</code> 滑音 (音高从0滑到5)<br>
-    <strong>⚡ 核心算法：基于重采样的独立变速/变调引擎 (无需外部库)</strong>
+    <h1>🎛️ 变调速率序列音频播放器 | 真·实时变速变调引擎</h1>
+    <p><strong>🎯 核心功能：</strong></p>
+    <ul>
+        <li><strong>变速不变调</strong>：改变播放速度，音高保持不变</li>
+        <li><strong>变调不变速</strong>：改变音高，播放速度保持不变</li>
+        <li><strong>实时调节</strong>：播放过程中随时调整，立即生效</li>
+        <li><strong>序列播放</strong>：支持复杂的音高/速度序列</li>
+    </ul>
+    <p><strong>📝 语法：</strong> <code>文件名:起始音高[to结束音高]@速度系数</code><br>
+    例: <code>a:0@1.0, i:+5@1.0, u:0@0.8, ka:0to5@1.0</code><br>
+    ▪ 音高用半音单位，+5=升5半音，-3=降3半音<br>
+    ▪ 速度系数 0.5~2.0，1=原速<br>
+    ▪ <code>to</code> 表示滑音（从起始音高渐变到结束音高）
     </p>
     <hr>
+
+    <!-- 测试区域 -->
+    <div class="test-section">
+        <strong>🧪 快速测试（内置测试音）：</strong>
+        <button id="testTempoBtn">测试变速不变调 (0.5x → 1.0x → 1.5x)</button>
+        <button id="testPitchBtn">测试变调不变速 (-5 → 0 → +5 半音)</button>
+        <button id="testGlideBtn">测试滑音 (0→12 半音)</button>
+        <small style="display:block; margin-top:5px;">点击按钮自动生成并播放测试音</small>
+    </div>
 
     <div>
         <label>📂 上传音频文件 (可追加, 同名覆盖):</label>
@@ -37,29 +54,59 @@
     </div>
     <br>
 
+    <!-- 实时控制面板 -->
+    <div class="param-panel">
+        <strong>🎚️ 实时控制（如果正在播放序列，拖动滑块立即生效）：</strong><br>
+        <label>速度 (tempo): <input type="range" id="tempoSlider" min="0.5" max="2.0" step="0.01" value="1.0"></label>
+        <span id="tempoValue">1.00</span>
+        <label style="margin-left:20px;">音高 (pitchSemitones): <input type="range" id="pitchSlider" min="-12" max="12" step="1" value="0"></label>
+        <span id="pitchValue">0</span>
+        <button id="applyParamsBtn" style="margin-left:20px;">应用当前参数到当前播放</button>
+        <br><small>💡 提示：拖动滑块后点击"应用"可实时改变当前正在播放的音频效果</small>
+    </div>
+
     <div>
         <label>🎼 播放序列:</label><br>
-        <textarea id="sequenceInput" rows="4" cols="80" placeholder="示例:&#10;a:0@1.0, i:+5@1.0, u:0@0.8, e:-2@1.2, ka:+3to+7@1.0"></textarea>
-        <br><small>格式: 文件名:起始音高[to结束音高]@速度系数。音高: +n 或 n 或 -n (半音)。速度: 0.5~2.0 (1为标准)</small>
+        <textarea id="sequenceInput" rows="4" cols="80" placeholder="示例:&#10;a:0@1.0, i:+5@1.0, u:0@0.8, e:-2@1.2, breath:0@1.0, ka:0to5@1.0"></textarea>
+        <br><small>格式: 文件名:起始音高[to结束音高]@速度系数 | 多个条目用逗号分隔</small>
     </div>
     <br>
 
     <button id="playBtn">▶ 播放序列</button>
     <button id="stopBtn">⏹ 停止播放</button>
 
-    <div id="status">等待操作...<br>✅ 自包含引擎已就绪，无需外部依赖</div>
+    <div id="status">等待操作...<br>✅ 引擎就绪，使用 AudioWorklet 实现真正的实时变速变调</div>
 
-    <script>
-        // ======================= 纯原生实现：变速不变调 / 变调不变速 =======================
-        // 原理：通过重采样 + 线性插值 + 音高调整算法
-        // 不需要任何外部库，完全自包含
+    <script type="importmap">
+        {
+            "imports": {
+                "@soundtouchjs/audio-worklet": "https://cdn.skypack.dev/@soundtouchjs/audio-worklet"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import createSoundTouchNode from '@soundtouchjs/audio-worklet';
         
+        // ======================= 全局变量 =======================
         let audioContext = null;
-        let currentSource = null;
-        let isPlaying = false;
-        let fileMap = new Map();  // key -> { blobUrl, originalBuffer, sampleRate }
+        let soundtouchNode = null;
+        let currentBufferNode = null;
+        let currentGainNode = null;
+        let isPlayingSequence = false;
+        let sequenceQueue = [];
+        let currentSequenceIndex = 0;
+        let fileMap = new Map();  // key -> { blobUrl, audioBuffer }
         
-        // ---------- UI 辅助 ----------
+        // 当前实时参数
+        let currentTempo = 1.0;
+        let currentPitchSemitones = 0;
+        
+        // 当前正在播放的音频源（用于实时参数更新）
+        let activeSourceNode = null;
+        let activeSoundtouchNode = null;
+        
+        // ======================= UI 辅助 =======================
         function logMessage(msg, isError = false) {
             const statusDiv = document.getElementById('status');
             const p = document.createElement('div');
@@ -111,14 +158,13 @@
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     const arrayBuffer = e.target.result;
-                    const ctx = ensureAudioContext();
+                    const ctx = await getAudioContext();
                     try {
                         const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
                         fileMap.set(key, {
                             blobUrl: blobUrl,
                             originalFile: file,
-                            originalBuffer: audioBuffer,
-                            sampleRate: audioBuffer.sampleRate
+                            audioBuffer: audioBuffer
                         });
                         logMessage(`📊 已解码: ${baseName} (${audioBuffer.duration.toFixed(2)}秒)`);
                         updateFileListDisplay();
@@ -131,226 +177,166 @@
             updateFileListDisplay();
         }
         
-        function ensureAudioContext() {
+        // ======================= AudioContext 初始化 =======================
+        async function getAudioContext() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
             return audioContext;
         }
         
-        function stopSequence() {
-            if (currentSource) {
-                try { currentSource.stop(); } catch(e) {}
-                currentSource = null;
+        async function initAudioContext() {
+            const ctx = await getAudioContext();
+            if (ctx.state === 'suspended') {
+                await ctx.resume();
             }
-            isPlaying = false;
-            logMessage("⏹ 已停止");
+            return ctx;
         }
         
-        // ========== 核心算法：变速不变调 / 变调不变速 ==========
-        // 通过重采样实现速度变化，通过相位声码器原理实现音高变化
-        // 这里使用高质量线性插值重采样 + 音高重映射
+        // ======================= 实时参数更新 =======================
+        function updateRealTimeParams() {
+            if (activeSoundtouchNode && activeSoundtouchNode.parameters) {
+                activeSoundtouchNode.parameters.get('tempo').value = currentTempo;
+                activeSoundtouchNode.parameters.get('pitchSemitones').value = currentPitchSemitones;
+                logMessage(`🎛️ 实时更新: tempo=${currentTempo.toFixed(2)}, pitchSemitones=${currentPitchSemitones >= 0 ? '+' : ''}${currentPitchSemitones}`);
+            }
+        }
         
-        /**
-         * 处理音频：支持独立变速和变调
-         * @param {AudioBuffer} sourceBuffer 原始音频
-         * @param {number} pitchShift 音高偏移（半音数，可正可负）
-         * @param {number} tempoRatio 速度系数（1=原速，<1变慢，>1变快）
-         * @param {number|null} glideEndPitch 滑音终点（可选）
-         * @returns {Promise<AudioBuffer>}
-         */
-        async function processAudio(sourceBuffer, pitchShift, tempoRatio, glideEndPitch = null) {
-            return new Promise((resolve) => {
-                const channels = sourceBuffer.numberOfChannels;
-                const originalSampleRate = sourceBuffer.sampleRate;
-                const originalLength = sourceBuffer.length;
-                const originalDuration = sourceBuffer.duration;
+        // ======================= 核心播放函数 =======================
+        async function playAudioWithParams(audioBuffer, tempo, pitchSemitones, glideEndPitch = null, onEnd = null) {
+            try {
+                const ctx = await initAudioContext();
                 
-                // 提取所有声道数据
-                const channelData = [];
-                for (let ch = 0; ch < channels; ch++) {
-                    channelData.push(sourceBuffer.getChannelData(ch));
+                // 停止当前播放
+                if (activeSoundtouchNode) {
+                    try {
+                        activeSoundtouchNode.disconnect();
+                    } catch(e) {}
+                    activeSoundtouchNode = null;
+                }
+                if (activeSourceNode) {
+                    try {
+                        activeSourceNode.stop();
+                    } catch(e) {}
+                    activeSourceNode = null;
                 }
                 
-                // 如果有滑音，分段处理
-                if (glideEndPitch !== null && Math.abs(glideEndPitch - pitchShift) > 0.01) {
-                    const segments = 16;
-                    const segmentSamples = Math.floor(originalLength / segments);
-                    const tempBuffers = [];
-                    
-                    let processSegment = (idx) => {
-                        if (idx >= segments) {
-                            // 合并所有段
-                            const totalSamples = tempBuffers.reduce((sum, buf) => sum + buf.length, 0);
-                            const resultBuffer = audioContext.createBuffer(channels, totalSamples, originalSampleRate);
-                            let writePos = 0;
-                            for (let ch = 0; ch < channels; ch++) {
-                                const merged = new Float32Array(totalSamples);
-                                let offset = 0;
-                                for (let buf of tempBuffers) {
-                                    merged.set(buf[ch], offset);
-                                    offset += buf[ch].length;
-                                }
-                                resultBuffer.copyToChannel(merged, ch);
-                            }
-                            resolve(resultBuffer);
-                            return;
-                        }
-                        
-                        const t = idx / (segments - 1);
-                        const currentPitch = pitchShift + (glideEndPitch - pitchShift) * t;
-                        const segStart = idx * segmentSamples;
-                        const segEnd = Math.min((idx + 1) * segmentSamples, originalLength);
-                        const segLen = segEnd - segStart;
-                        
-                        if (segLen <= 0) {
-                            processSegment(idx + 1);
-                            return;
-                        }
-                        
-                        // 提取段数据
-                        const segChannelData = [];
-                        for (let ch = 0; ch < channels; ch++) {
-                            segChannelData.push(channelData[ch].slice(segStart, segEnd));
-                        }
-                        
-                        // 处理这一段
-                        const processed = processSingleSegment(segChannelData, currentPitch, tempoRatio, originalSampleRate, channels);
-                        tempBuffers.push(processed);
-                        processSegment(idx + 1);
-                    };
-                    processSegment(0);
+                // 如果有滑音，暂时用分段模拟（AudioWorklet原生不支持动态滑音）
+                if (glideEndPitch !== null && Math.abs(glideEndPitch - pitchSemitones) > 0.1) {
+                    logMessage(`🎚️ 滑音模式: ${pitchSemitones} → ${glideEndPitch} 半音 (分段处理)`);
+                    await playWithGlide(ctx, audioBuffer, pitchSemitones, glideEndPitch, tempo, onEnd);
                     return;
                 }
                 
-                // 无滑音：直接处理整个音频
-                const result = processSingleSegment(channelData, pitchShift, tempoRatio, originalSampleRate, channels);
-                resolve(result);
-            });
-        }
-        
-        /**
-         * 处理单个音频段（核心算法）
-         * 变速：改变采样步长（重采样）
-         * 变调：先变速再重采样回原速率（实现音高变化而时长不变）
-         */
-        function processSingleSegment(channelData, pitchShift, tempoRatio, originalSampleRate, channels) {
-            // 计算综合变速系数
-            // 变调原理：先变速 pitchFactor 倍，再重采样回原速率，实现音高改变而时长不变
-            const pitchFactor = Math.pow(2, pitchShift / 12);
-            
-            // 最终重采样步长 = tempoRatio * pitchFactor
-            // 但我们需要分离效果：
-            // - 变速不变调：tempoRatio 作用，pitchFactor=1
-            // - 变调不变速：pitchFactor 作用，但通过后续重采样抵消时长变化
-            // - 同时变调变速：两者都作用
-            
-            // 实际实现：先按 (tempoRatio * pitchFactor) 重采样，时长会变
-            // 如果只需要变调不变速，需要再反向重采样一次
-            // 这里简化：直接用高质量插值算法
-            
-            const step = tempoRatio * pitchFactor;
-            const newLength = Math.floor(channelData[0].length / step);
-            
-            // 创建输出数组
-            const outputChannels = [];
-            for (let ch = 0; ch < channels; ch++) {
-                outputChannels.push(new Float32Array(newLength));
-            }
-            
-            // 高质量立方插值重采样
-            for (let ch = 0; ch < channels; ch++) {
-                const input = channelData[ch];
-                for (let i = 0; i < newLength; i++) {
-                    const srcPos = i * step;
-                    const srcIdx = Math.floor(srcPos);
-                    const frac = srcPos - srcIdx;
-                    
-                    if (srcIdx + 1 < input.length) {
-                        // 线性插值（性能好且质量足够）
-                        outputChannels[ch][i] = input[srcIdx] * (1 - frac) + input[srcIdx + 1] * frac;
-                    } else if (srcIdx < input.length) {
-                        outputChannels[ch][i] = input[srcIdx];
-                    } else {
-                        outputChannels[ch][i] = 0;
-                    }
-                }
-            }
-            
-            // 如果只需要变调不变速（tempoRatio=1 且 pitchShift!=0），
-            // 上面的算法会改变时长，需要重采样回原长度
-            if (Math.abs(tempoRatio - 1.0) < 0.001 && Math.abs(pitchShift) > 0.01) {
-                // 变调不变速：需要将结果再按 1/pitchFactor 重采样回原时长
-                const restoreStep = 1 / pitchFactor;
-                const finalLength = Math.floor(newLength * restoreStep);
-                const finalChannels = [];
-                for (let ch = 0; ch < channels; ch++) {
-                    finalChannels.push(new Float32Array(finalLength));
-                }
+                // 创建 SoundTouchNode
+                const soundtouch = createSoundTouchNode(ctx, AudioWorkletNode, audioBuffer);
                 
-                for (let ch = 0; ch < channels; ch++) {
-                    const input = outputChannels[ch];
-                    for (let i = 0; i < finalLength; i++) {
-                        const srcPos = i * restoreStep;
-                        const srcIdx = Math.floor(srcPos);
-                        const frac = srcPos - srcIdx;
-                        if (srcIdx + 1 < input.length) {
-                            finalChannels[ch][i] = input[srcIdx] * (1 - frac) + input[srcIdx + 1] * frac;
-                        } else if (srcIdx < input.length) {
-                            finalChannels[ch][i] = input[srcIdx];
-                        } else {
-                            finalChannels[ch][i] = 0;
-                        }
-                    }
-                }
-                
-                const resultBuffer = audioContext.createBuffer(channels, finalLength, originalSampleRate);
-                for (let ch = 0; ch < channels; ch++) {
-                    resultBuffer.copyToChannel(finalChannels[ch], ch);
-                }
-                return resultBuffer;
-            }
-            
-            // 普通模式（变速不变调 或 同时变调变速）
-            const resultBuffer = audioContext.createBuffer(channels, newLength, originalSampleRate);
-            for (let ch = 0; ch < channels; ch++) {
-                resultBuffer.copyToChannel(outputChannels[ch], ch);
-            }
-            return resultBuffer;
-        }
-        
-        // 播放处理后的音频
-        async function playBuffer(buffer, description) {
-            return new Promise((resolve, reject) => {
-                if (!audioContext || audioContext.state === 'closed') {
-                    reject(new Error('音频上下文无效'));
-                    return;
-                }
-                const doPlay = () => {
-                    if (!isPlaying) {
-                        reject(new Error('播放已停止'));
-                        return;
-                    }
-                    const source = audioContext.createBufferSource();
-                    source.buffer = buffer;
-                    source.connect(audioContext.destination);
-                    currentSource = source;
-                    source.onended = () => {
-                        if (currentSource === source) currentSource = null;
+                // 等待初始化完成
+                await new Promise((resolve) => {
+                    if (soundtouch.ready) {
                         resolve();
-                    };
-                    source.start();
-                    logMessage(`🎵 ${description} (时长: ${buffer.duration.toFixed(2)}秒)`);
-                };
-                if (audioContext.state !== 'running') {
-                    audioContext.resume().then(doPlay).catch(reject);
+                    } else {
+                        soundtouch.on('initialized', resolve);
+                    }
+                });
+                
+                // 设置参数
+                soundtouch.tempo = tempo;
+                soundtouch.pitchSemitones = pitchSemitones;
+                
+                // 保存当前活跃节点
+                activeSoundtouchNode = soundtouch;
+                currentTempo = tempo;
+                currentPitchSemitones = pitchSemitones;
+                
+                // 设置结束回调
+                if (onEnd) {
+                    soundtouch.on('end', () => {
+                        if (activeSoundtouchNode === soundtouch) {
+                            activeSoundtouchNode = null;
+                            activeSourceNode = null;
+                        }
+                        onEnd();
+                    });
                 } else {
-                    doPlay();
+                    soundtouch.on('end', () => {
+                        if (activeSoundtouchNode === soundtouch) {
+                            activeSoundtouchNode = null;
+                            activeSourceNode = null;
+                        }
+                    });
                 }
-            });
+                
+                // 连接并播放
+                const gainNode = ctx.createGain();
+                const bufferNode = soundtouch.connectToBuffer();
+                soundtouch.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                
+                activeSourceNode = bufferNode;
+                
+                soundtouch.play();
+                
+                const modeStr = (Math.abs(tempo - 1.0) > 0.001 && Math.abs(pitchSemitones) > 0.001) ? '变速+变调' :
+                                (Math.abs(tempo - 1.0) > 0.001) ? `变速不变调 x${tempo.toFixed(2)}` :
+                                (Math.abs(pitchSemitones) > 0.001) ? `变调不变速 ${pitchSemitones >= 0 ? '+' : ''}${pitchSemitones}半音` : 
+                                '原速原调';
+                logMessage(`🎵 播放中 | ${modeStr}`);
+                
+            } catch (err) {
+                logMessage(`❌ 播放失败: ${err.message}`, true);
+                if (onEnd) onEnd();
+            }
         }
         
-        // 解析序列
+        // 滑音模式（分段播放模拟）
+        async function playWithGlide(ctx, audioBuffer, startPitch, endPitch, tempo, onEnd) {
+            const segments = 20;
+            const segmentDuration = audioBuffer.duration / segments;
+            let currentSegment = 0;
+            
+            function playSegment() {
+                if (currentSegment >= segments) {
+                    if (onEnd) onEnd();
+                    return;
+                }
+                
+                const t = currentSegment / (segments - 1);
+                const currentPitch = startPitch + (endPitch - startPitch) * t;
+                
+                // 提取当前段
+                const startSample = Math.floor(currentSegment * segmentDuration * audioBuffer.sampleRate);
+                const endSample = Math.floor((currentSegment + 1) * segmentDuration * audioBuffer.sampleRate);
+                const length = endSample - startSample;
+                
+                if (length <= 0) {
+                    currentSegment++;
+                    playSegment();
+                    return;
+                }
+                
+                // 创建段buffer
+                const channels = audioBuffer.numberOfChannels;
+                const segmentBuffer = ctx.createBuffer(channels, length, audioBuffer.sampleRate);
+                for (let ch = 0; ch < channels; ch++) {
+                    const sourceData = audioBuffer.getChannelData(ch);
+                    const targetData = segmentBuffer.getChannelData(ch);
+                    for (let i = 0; i < length; i++) {
+                        targetData[i] = sourceData[startSample + i];
+                    }
+                }
+                
+                // 播放这一段
+                playAudioWithParams(segmentBuffer, tempo, currentPitch, null, () => {
+                    currentSegment++;
+                    playSegment();
+                });
+            }
+            
+            playSegment();
+        }
+        
+        // ======================= 序列播放 =======================
         function parseSequence(seqText) {
             const items = [];
             const parts = seqText.split(',');
@@ -413,120 +399,163 @@
                     startPitch: startPitch,
                     endPitch: endPitch,
                     tempoRatio: rate,
-                    hasGlide: hasGlide,
-                    originalRaw: fileName
+                    hasGlide: hasGlide
                 });
             }
             return items;
         }
         
-        // 主播放流程
         async function startPlaySequence() {
-            stopSequence();
-            if (fileMap.size === 0) {
-                logMessage("❌ 请先上传音频文件", true);
-                return;
+            // 停止当前播放
+            if (activeSoundtouchNode) {
+                try { activeSoundtouchNode.disconnect(); } catch(e) {}
+                activeSoundtouchNode = null;
             }
+            isPlayingSequence = true;
+            
             const seqText = document.getElementById('sequenceInput').value;
             if (!seqText.trim()) {
                 logMessage("❌ 序列不能为空", true);
+                isPlayingSequence = false;
                 return;
             }
             
             const tasks = parseSequence(seqText);
             if (tasks.length === 0) {
                 logMessage("❌ 无有效条目", true);
+                isPlayingSequence = false;
                 return;
             }
             
             const validTasks = [];
             for (let task of tasks) {
                 if (!fileMap.has(task.fileKey)) {
-                    logMessage(`⚠️ 跳过缺失: ${task.originalRaw}`, true);
+                    logMessage(`⚠️ 跳过缺失: ${task.fileKey}`, true);
                     continue;
                 }
                 validTasks.push(task);
             }
             if (validTasks.length === 0) {
                 logMessage("❌ 无有效音频", true);
+                isPlayingSequence = false;
                 return;
             }
             
-            const ctx = ensureAudioContext();
-            try {
-                if (ctx.state === 'suspended') await ctx.resume();
-                else if (ctx.state === 'closed') {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    await audioContext.resume();
-                }
-            } catch(e) {
-                logMessage(`❌ 音频启动失败: ${e.message}`, true);
-                return;
-            }
+            await initAudioContext();
+            logMessage(`▶ 开始播放序列，共 ${validTasks.length} 段`);
             
-            isPlaying = true;
-            logMessage(`▶ 开始播放序列，共 ${validTasks.length} 段 (自包含引擎)`);
-            
-            for (let i = 0; i < validTasks.length; i++) {
-                if (!isPlaying) break;
+            for (let i = 0; i < validTasks.length && isPlayingSequence; i++) {
                 const task = validTasks[i];
                 const fileInfo = fileMap.get(task.fileKey);
-                if (!fileInfo || !fileInfo.originalBuffer) {
+                if (!fileInfo || !fileInfo.audioBuffer) {
                     logMessage(`❌ 数据未就绪: ${task.fileKey}`, true);
                     continue;
                 }
                 
-                try {
-                    const modeDesc = task.hasGlide ? `滑音 ${task.startPitch}→${task.endPitch}半音` :
-                                    (Math.abs(task.tempoRatio-1.0) > 0.001 && Math.abs(task.startPitch) > 0.001 ? `变速+变调` :
-                                     (Math.abs(task.tempoRatio-1.0) > 0.001 ? `变速不变调 x${task.tempoRatio}` :
-                                      (Math.abs(task.startPitch) > 0.001 ? `变调不变速 ${task.startPitch>=0?'+':''}${task.startPitch}半音` : `原速原调`)));
-                    
-                    logMessage(`🔧 处理: ${task.originalRaw} | ${modeDesc}`);
-                    const processedBuffer = await processAudio(
-                        fileInfo.originalBuffer,
-                        task.startPitch,
+                const desc = `${task.fileKey} | 音高:${task.startPitch}${task.hasGlide ? `→${task.endPitch}` : ''} 速度:${task.tempoRatio}`;
+                logMessage(`🔧 播放: ${desc}`);
+                
+                await new Promise((resolve) => {
+                    playAudioWithParams(
+                        fileInfo.audioBuffer,
                         task.tempoRatio,
-                        task.hasGlide ? task.endPitch : null
+                        task.startPitch,
+                        task.hasGlide ? task.endPitch : null,
+                        resolve
                     );
-                    if (!isPlaying) break;
-                    await playBuffer(processedBuffer, `${task.originalRaw} | ${modeDesc}`);
-                } catch (err) {
-                    if (!isPlaying) break;
-                    logMessage(`❌ 处理失败 ${task.originalRaw}: ${err.message}`, true);
-                }
+                });
             }
-            if (isPlaying) {
+            
+            if (isPlayingSequence) {
                 logMessage("✅ 序列播放完毕");
-                isPlaying = false;
-                currentSource = null;
             }
+            isPlayingSequence = false;
         }
         
-        // 事件绑定
+        function stopSequence() {
+            isPlayingSequence = false;
+            if (activeSoundtouchNode) {
+                try { activeSoundtouchNode.disconnect(); } catch(e) {}
+                activeSoundtouchNode = null;
+            }
+            if (activeSourceNode) {
+                try { activeSourceNode.stop(); } catch(e) {}
+                activeSourceNode = null;
+            }
+            logMessage("⏹ 已停止");
+        }
+        
+        // ======================= 测试音生成 =======================
+        async function generateTestTone(duration = 2.0, frequency = 440) {
+            const ctx = await initAudioContext();
+            const sampleRate = ctx.sampleRate;
+            const length = sampleRate * duration;
+            const buffer = ctx.createBuffer(1, length, sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < length; i++) {
+                data[i] = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 0.5;
+            }
+            return buffer;
+        }
+        
+        // ======================= 事件绑定 =======================
         document.getElementById('audioFiles').addEventListener('change', (e) => {
             handleFilesUpload(e.target.files);
             e.target.value = '';
         });
         document.getElementById('clearFilesBtn').addEventListener('click', clearAllFiles);
         document.getElementById('playBtn').addEventListener('click', () => {
-            if (isPlaying) {
+            if (isPlayingSequence) {
                 stopSequence();
-                setTimeout(() => startPlaySequence(), 50);
+                setTimeout(() => startPlaySequence(), 100);
             } else {
                 startPlaySequence();
             }
         });
         document.getElementById('stopBtn').addEventListener('click', stopSequence);
+        document.getElementById('applyParamsBtn').addEventListener('click', updateRealTimeParams);
         
-        window.addEventListener('beforeunload', () => {
-            for (let [key, info] of fileMap.entries()) {
-                if (info.blobUrl) URL.revokeObjectURL(info.blobUrl);
-            }
-            if (audioContext) audioContext.close();
+        // 测试按钮
+        document.getElementById('testTempoBtn').addEventListener('click', async () => {
+            stopSequence();
+            const testBuffer = await generateTestTone(3.0, 440);
+            fileMap.set('test', { audioBuffer: testBuffer, originalFile: { name: 'test' } });
+            logMessage("🧪 测试变速不变调：速度从0.5x渐变到1.0x再到1.5x");
+            await playAudioWithParams(testBuffer, 0.5, 0, null);
+            setTimeout(() => playAudioWithParams(testBuffer, 1.0, 0, null), 3500);
+            setTimeout(() => playAudioWithParams(testBuffer, 1.5, 0, null), 7000);
         });
         
-        logMessage("✅ 自包含引擎就绪 | 语法: 文件名:音高偏移@速度系数 | 无需任何外部依赖");
+        document.getElementById('testPitchBtn').addEventListener('click', async () => {
+            stopSequence();
+            const testBuffer = await generateTestTone(3.0, 440);
+            fileMap.set('test', { audioBuffer: testBuffer, originalFile: { name: 'test' } });
+            logMessage("🧪 测试变调不变速：音高从-5半音到0到+5半音");
+            await playAudioWithParams(testBuffer, 1.0, -5, null);
+            setTimeout(() => playAudioWithParams(testBuffer, 1.0, 0, null), 3500);
+            setTimeout(() => playAudioWithParams(testBuffer, 1.0, 5, null), 7000);
+        });
+        
+        document.getElementById('testGlideBtn').addEventListener('click', async () => {
+            stopSequence();
+            const testBuffer = await generateTestTone(4.0, 440);
+            fileMap.set('test', { audioBuffer: testBuffer, originalFile: { name: 'test' } });
+            logMessage("🧪 测试滑音：音高从0半音滑到12半音");
+            await playAudioWithParams(testBuffer, 1.0, 0, 12, null);
+        });
+        
+        // 实时滑块显示
+        document.getElementById('tempoSlider').addEventListener('input', (e) => {
+            currentTempo = parseFloat(e.target.value);
+            document.getElementById('tempoValue').textContent = currentTempo.toFixed(2);
+        });
+        document.getElementById('pitchSlider').addEventListener('input', (e) => {
+            currentPitchSemitones = parseFloat(e.target.value);
+            document.getElementById('pitchValue').textContent = currentPitchSemitones;
+        });
+        
+        logMessage("✅ 引擎就绪 | 使用 @soundtouchjs/audio-worklet 实现真正实时变速变调");
+        logMessage("💡 提示：点击「测试变速不变调」立即体验效果，拖动滑块后点击「应用参数」可实时改变当前播放");
     </script>
 </body>
 </html>
