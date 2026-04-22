@@ -2,25 +2,34 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>变调速率序列音频播放器 | 支持追加文件</title>
-    <!-- 无CSS，纯粹命令行风格 -->
+    <title>变调速率序列音频播放器 | 滑音·变速·变调引擎</title>
+    <!-- 纯粹命令行风格，无CSS -->
 </head>
 <body>
-    <h1>变调速率序列音频播放器</h1>
-    <p>上传音频文件（可追加，同名覆盖）。然后输入序列，格式如 <code>a:0,i:2,u:-1</code>。没有冒号则默认音高+1。</p>
+    <h1>🎛️ 变调速率序列音频播放器 | 滑音·变速引擎</h1>
+    <p><strong>语法升级：</strong> <code>文件名:起始音高[to结束音高]@[速度系数]</code><br>
+    ▪ <code>a:0</code> 固定音高0 (C4) <br>
+    ▪ <code>a:0to5</code> 从音高0 平滑滑音 → 音高5 <br>
+    ▪ <code>a:0@0.8</code> 变速不变调 (播放速率0.8, 音高保持0, 时长变长)<br>
+    ▪ <code>a:0to5@1.2</code> 滑音 + 整体速率1.2倍 (音高滑音同时时长缩短)<br>
+    ▪ <code>a@1.5</code> 仅变速 (音高不变, 速率1.5倍)<br>
+    ▪ <code>a</code> 默认音高+1 <br>
+    <strong>⚠️ 变速不变调: 使用 <code>@</code> 符号单独改变速率, 不影响音高偏移。<br>
+    变调不变速: 使用 <code>:音高</code> 或者 <code>to滑音</code>, 速率保持1.0 (除非加@)。</strong>
+    </p>
     <hr>
 
-    <!-- 文件上传区：支持多选，且追加到列表 -->
+    <!-- 文件上传区：追加上传 -->
     <div>
-        <label for="audioFiles">📂 选择音频文件（可追加，不会清空已有）：</label>
+        <label for="audioFiles">📂 上传音频文件 (mp3/wav/ogg等, 可追加, 同名覆盖):</label>
         <input type="file" id="audioFiles" accept="audio/*" multiple>
         <button id="clearFilesBtn" style="margin-left: 10px;">🗑 清空所有文件</button>
     </div>
     <br>
 
-    <!-- 已加载文件列表（命令行风格） -->
+    <!-- 已加载文件列表 -->
     <div>
-        <strong>📋 当前已加载文件列表（文件名不区分大小写，不含后缀）：</strong>
+        <strong>📋 当前采样库 (文件名不含后缀, 大小写不敏感):</strong>
         <div id="fileListDisplay" style="border:1px solid #ccc; padding: 8px; min-height: 60px; max-height: 150px; overflow-y: auto; font-family: monospace; background: #f9f9f9;">
             暂无文件
         </div>
@@ -29,9 +38,11 @@
 
     <!-- 序列输入框 -->
     <div>
-        <label for="sequenceInput">🎼 播放序列（命令行风格）：</label><br>
-        <textarea id="sequenceInput" rows="3" cols="70" placeholder="例如: a:0, i_long:2, breath:0, a_short:-1&#10;或者简写: a,b,c  (默认音高1)"></textarea>
-        <br><small>提示：文件名不需要后缀。支持负音高。依次播放，支持多次调用同一文件。</small>
+        <label for="sequenceInput">🎼 播放序列 (命令行语法):</label><br>
+        <textarea id="sequenceInput" rows="4" cols="80" placeholder="示例:&#10;a:0, i:2to5@1.2, u:-1, breath:0, ka:0to-3@0.8&#10;或者纯变速: a@1.5, i@0.7, breath@1.0"></textarea>
+        <br><small>🔹 滑音: <code>文件名:开始to结束</code>   🔹 变速: <code>@数字</code> (1为标准速度)   🔹 组合: <code>文件名:开始to结束@速率</code> 或 <code>文件名:固定音高@速率</code><br>
+        🔸 没有冒号且没有@ → 默认音高+1。 没有to → 固定音高。 速率省略=1.0。 滑音自动线性插值, 不影响辅音真实感。
+        </small>
     </div>
     <br>
 
@@ -40,24 +51,27 @@
     <button id="stopBtn">⏹ 停止播放</button>
 
     <!-- 状态与日志 -->
-    <div id="status" style="margin-top: 20px; border: 1px solid #ccc; padding: 8px; min-height: 120px; font-family: monospace; overflow-y: auto; max-height: 250px; background: #fefefe;">
+    <div id="status" style="margin-top: 20px; border: 1px solid #ccc; padding: 8px; min-height: 140px; font-family: monospace; overflow-y: auto; max-height: 280px; background: #fefefe;">
         等待操作...<br>
-        💡 提示：可多次上传追加文件，同名文件会覆盖。预处理好的“a_short.wav”“a_long.wav”等可以一起工作。
+        💡 提示: 可多次上传追加音频。 滑音/变速基于Web Audio原生实现, 实时高品质。
     </div>
 
     <script>
-        // ---------- 全局变量 ----------
+        // ======================= 增强版解析器 + 滑音 + 变速不变调 / 变调不变速 =======================
+        // 核心: 支持语法:  [文件名][:音高起点[to音高终点]][@速率]
+        // 速率仅控制播放速度, 独立于音高偏移 (变速不变调: 只用@, 不写音高偏移)
+        // 变调不变速: 写音高偏移或滑音, 速率=1(默认)
+        // 滑音: 动态修改 playbackRate 从 startRate 渐变至 endRate (基于半音换算)
+        
         let audioContext = null;
         let currentSource = null;
-        let currentTimeout = null;
+        let currentGainNode = null;      // 用于滑音过程中可停止
+        let currentScheduledEnd = null;   // 用于保护
         let isPlaying = false;
-        let playQueue = [];
-        let currentIndex = 0;
-
-        // 存储文件映射：key为小写文件名(无后缀) -> { blobUrl, bufferPromise, buffer, originalName }
-        let fileMap = new Map();
-
-        // ---------- UI 辅助函数 ----------
+        let currentPlayTimeout = null;
+        let fileMap = new Map();           // key: lowercase filename without ext -> {blobUrl, bufferPromise, buffer}
+        
+        // ---------- UI 辅助 ----------
         function logMessage(msg, isError = false) {
             const statusDiv = document.getElementById('status');
             const p = document.createElement('div');
@@ -69,7 +83,6 @@
             console.log(msg);
         }
 
-        // 刷新文件列表显示区域
         function updateFileListDisplay() {
             const container = document.getElementById('fileListDisplay');
             if (fileMap.size === 0) {
@@ -79,156 +92,146 @@
             let html = '';
             for (let [key, info] of fileMap.entries()) {
                 const originalFileName = info.originalFile ? info.originalFile.name : key;
-                html += `<div>🎵 ${key}  ← 原始文件: ${originalFileName}</div>`;
+                html += `<div>🎵 ${key}  ← ${originalFileName}</div>`;
             }
             container.innerHTML = html;
         }
 
-        // 释放所有 Blob URL 并清空 Map
         function clearAllFiles() {
             for (let [key, info] of fileMap.entries()) {
-                if (info.blobUrl) {
-                    URL.revokeObjectURL(info.blobUrl);
-                }
+                if (info.blobUrl) URL.revokeObjectURL(info.blobUrl);
             }
             fileMap.clear();
             updateFileListDisplay();
             logMessage("🗑 已清空所有音频文件");
         }
 
-        // 处理文件上传：追加模式，同名则覆盖（先释放旧URL）
         function handleFilesUpload(files) {
             if (!files || files.length === 0) return;
-
-            let addedCount = 0;
-            let replacedCount = 0;
-
+            let addedCount = 0, replacedCount = 0;
             for (let file of files) {
-                // 获取不带扩展名的文件名
                 let fullName = file.name;
                 let dotIndex = fullName.lastIndexOf('.');
                 let baseName = dotIndex !== -1 ? fullName.substring(0, dotIndex) : fullName;
                 let key = baseName.toLowerCase();
-
-                // 如果已存在同名，先释放旧资源并提示覆盖
                 if (fileMap.has(key)) {
                     const oldInfo = fileMap.get(key);
                     if (oldInfo.blobUrl) URL.revokeObjectURL(oldInfo.blobUrl);
                     replacedCount++;
-                    logMessage(`🔄 覆盖文件: ${baseName} (之前已存在)`);
-                } else {
-                    addedCount++;
-                }
-
-                // 创建新的 blob URL
+                    logMessage(`🔄 覆盖文件: ${baseName}`);
+                } else addedCount++;
                 const blobUrl = URL.createObjectURL(file);
-                fileMap.set(key, {
-                    blobUrl: blobUrl,
-                    originalFile: file,
-                    buffer: null,
-                    bufferPromise: null
-                });
-                logMessage(`✅ ${addedCount > 0 && replacedCount === 0 ? '新增' : ''} 已加载: ${baseName} (${file.type || 'audio'})`);
+                fileMap.set(key, { blobUrl, originalFile: file, buffer: null, bufferPromise: null });
+                logMessage(`✅ 已加载: ${baseName}`);
             }
-
             updateFileListDisplay();
-            if (addedCount > 0) logMessage(`✨ 本次新增 ${addedCount} 个文件，覆盖 ${replacedCount} 个文件。当前共 ${fileMap.size} 个音频。`);
-            else if (replacedCount > 0) logMessage(`🔄 本次覆盖 ${replacedCount} 个文件，当前共 ${fileMap.size} 个音频。`);
+            logMessage(`✨ 新增 ${addedCount} 个，覆盖 ${replacedCount} 个。共 ${fileMap.size} 个音频。`);
         }
 
-        // ---------- 音频核心逻辑 (与之前类似，但添加停止等) ----------
+        // AudioContext 管理
         function ensureAudioContext() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
             return audioContext;
         }
 
         function stopCurrentPlayback() {
-            if (currentTimeout) {
-                clearTimeout(currentTimeout);
-                currentTimeout = null;
-            }
+            if (currentPlayTimeout) { clearTimeout(currentPlayTimeout); currentPlayTimeout = null; }
             if (currentSource) {
-                try {
-                    currentSource.stop();
-                } catch(e) {}
-                currentSource.disconnect();
+                try { currentSource.stop(); } catch(e) {}
+                try { currentSource.disconnect(); } catch(e) {}
                 currentSource = null;
             }
+            if (currentGainNode) {
+                try { currentGainNode.disconnect(); } catch(e) {}
+                currentGainNode = null;
+            }
             isPlaying = false;
-            playQueue = [];
-            currentIndex = 0;
         }
 
         function stopSequence() {
-            if (audioContext && currentSource) {
-                try {
-                    currentSource.stop();
-                } catch(e) {}
-                currentSource.disconnect();
-                currentSource = null;
-            }
-            if (currentTimeout) clearTimeout(currentTimeout);
-            isPlaying = false;
-            playQueue = [];
-            currentIndex = 0;
+            stopCurrentPlayback();
             logMessage("⏹ 播放已停止");
         }
 
-        // 根据 fileKey 获取 AudioBuffer (带缓存)
-        function getAudioBuffer(fileKey) {
+        // 获取音频buffer (缓存)
+        async function getAudioBuffer(fileKey) {
             const fileInfo = fileMap.get(fileKey);
-            if (!fileInfo) {
-                return Promise.reject(new Error(`未找到文件: ${fileKey}`));
-            }
-            if (fileInfo.bufferPromise) {
-                return fileInfo.bufferPromise;
-            }
+            if (!fileInfo) throw new Error(`未找到文件: ${fileKey}`);
+            if (fileInfo.buffer) return fileInfo.buffer;
+            if (fileInfo.bufferPromise) return fileInfo.bufferPromise;
             const ctx = ensureAudioContext();
-            const blobUrl = fileInfo.blobUrl;
-            const promise = fetch(blobUrl)
-                .then(response => response.arrayBuffer())
-                .then(arrayBuffer => ctx.decodeAudioData(arrayBuffer))
-                .then(audioBuffer => {
-                    fileInfo.buffer = audioBuffer;
-                    return audioBuffer;
-                })
-                .catch(err => {
-                    logMessage(`❌ 解码失败 (${fileKey}): ${err.message}`, true);
-                    throw err;
-                });
+            const promise = fetch(fileInfo.blobUrl)
+                .then(r => r.arrayBuffer())
+                .then(buf => ctx.decodeAudioData(buf))
+                .then(audioBuffer => { fileInfo.buffer = audioBuffer; return audioBuffer; })
+                .catch(err => { logMessage(`❌ 解码失败 ${fileKey}: ${err.message}`, true); throw err; });
             fileInfo.bufferPromise = promise;
             return promise;
         }
 
-        // 播放单个音频 (playOne)
-        function playOne(buffer, pitch, fileIdentifier) {
+        // 将半音偏移转换为 playbackRate 系数
+        function semitoneToRate(semitones) {
+            return Math.pow(2, semitones / 12);
+        }
+
+        // ======================= 核心播放: 支持固定音高 / 滑音 / 独立变速 =======================
+        // 参数: buffer, startSemitone, endSemitone (若为null则固定), globalRate (播放速率, 默认1.0)
+        // 注意: 音高偏移通过改变 playbackRate 实现。 滑音时动态线性插值 playbackRate。
+        // 为了支持独立变速而不影响音高映射，实际上速率 = 音高倍率 * 全局速率因子。
+        // 但变速不变调: 需要 音高倍率=1, 全局速率因子 = 用户指定值。
+        // 变调不变速: 音高倍率变化, 全局速率=1。
+        // 组合: 音高倍率 * globalRate 作为最终 playbackRate.value 动态曲线。
+        function playOneAdvanced(buffer, startSemis, endSemis, globalRate, fileIdentifier) {
             return new Promise((resolve, reject) => {
                 if (!audioContext || audioContext.state === 'closed') {
-                    reject(new Error('音频上下文不可用'));
+                    reject(new Error('音频上下文无效'));
                     return;
                 }
                 const doPlay = () => {
                     if (!isPlaying) {
-                        reject(new Error('播放已被用户停止'));
+                        reject(new Error('播放已停止'));
                         return;
                     }
                     const source = audioContext.createBufferSource();
                     source.buffer = buffer;
-                    const playbackRate = Math.pow(2, pitch / 12);
-                    source.playbackRate.value = playbackRate;
-                    source.connect(audioContext.destination);
-                    currentSource = source;
-                    source.onended = () => {
-                        if (currentSource === source) currentSource = null;
-                        resolve();
-                    };
-                    source.start();
-                    const pitchStr = pitch >= 0 ? `+${pitch}` : `${pitch}`;
-                    logMessage(`🎵 播放: ${fileIdentifier} (音高 ${pitchStr} 半音, 速率=${playbackRate.toFixed(4)})`);
+                    const duration = buffer.duration;
+                    const startTime = audioContext.currentTime;
+                    
+                    // 滑音模式: 需要动态改变 playbackRate
+                    const isGlide = (startSemis !== null && endSemis !== null && Math.abs(startSemis - endSemis) > 0.001);
+                    
+                    if (!isGlide) {
+                        // 固定音高模式 (包括仅变速不变调)
+                        const finalSemis = (startSemis !== null) ? startSemis : 0;
+                        const rate = semitoneToRate(finalSemis) * globalRate;
+                        source.playbackRate.value = rate;
+                        source.connect(audioContext.destination);
+                        currentSource = source;
+                        source.onended = () => {
+                            if (currentSource === source) currentSource = null;
+                            resolve();
+                        };
+                        source.start();
+                        const pitchInfo = (startSemis !== null) ? `音高${startSemis>=0?'+':''}${startSemis}` : '音高不变';
+                        logMessage(`🎵 ${fileIdentifier} | ${pitchInfo} | 全局速率=${globalRate.toFixed(3)} | 最终速率=${rate.toFixed(4)}`);
+                    } else {
+                        // 滑音: 起始速率 -> 结束速率 (基于半音换算，再乘globalRate)
+                        const startRate = semitoneToRate(startSemis) * globalRate;
+                        const endRate = semitoneToRate(endSemis) * globalRate;
+                        // 使用AudioParam 线性渐变 (完美平滑滑音)
+                        source.playbackRate.setValueAtTime(startRate, startTime);
+                        source.playbackRate.linearRampToValueAtTime(endRate, startTime + duration);
+                        source.connect(audioContext.destination);
+                        currentSource = source;
+                        source.onended = () => {
+                            if (currentSource === source) currentSource = null;
+                            resolve();
+                        };
+                        source.start();
+                        logMessage(`🎵 ${fileIdentifier} | 滑音: ${startSemis>=0?'+':''}${startSemis} → ${endSemis>=0?'+':''}${endSemis} 半音 | 全局速率=${globalRate} | 速率渐变: ${startRate.toFixed(3)}→${endRate.toFixed(3)}`);
+                    }
                 };
-
+                
                 if (audioContext.state !== 'running') {
                     audioContext.resume().then(doPlay).catch(reject);
                 } else {
@@ -236,78 +239,152 @@
                 }
             });
         }
-
-        // 解析序列文本 (同前)
-        function parseSequence(sequenceText) {
+        
+        // ======================= 高级解析器: 支持 to 滑音, @ 变速, 以及组合 =======================
+        // 格式严格: [文件名][:起点[to终点]][@速率]
+        // 例子: 
+        //   a:0to5@1.2     -> 滑音 0->5 半音, 速率1.2
+        //   a:0@0.8         -> 固定音高0, 速率0.8 (变调+变速)
+        //   a@1.5           -> 音高不变 (0半音偏移), 速率1.5 (变速不变调)
+        //   a:0to5          -> 滑音, 速率1.0
+        //   a:3             -> 固定音高3, 速率1.0
+        //   a               -> 默认音高1, 速率1.0
+        function parseAdvancedSequence(seqText) {
             const items = [];
-            if (!sequenceText.trim()) return items;
-            const parts = sequenceText.split(',');
+            const parts = seqText.split(',');
             for (let part of parts) {
                 part = part.trim();
                 if (part === "") continue;
-                let fileKey = "";
-                let pitch = 1;
-                if (part.includes(':')) {
-                    const idx = part.indexOf(':');
-                    fileKey = part.substring(0, idx).trim();
-                    const pitchPart = part.substring(idx + 1).trim();
-                    if (pitchPart !== "") {
-                        const parsed = parseInt(pitchPart, 10);
-                        if (!isNaN(parsed)) pitch = parsed;
-                        else logMessage(`警告: 音高 "${pitchPart}" 非整数，用默认1`, true);
+                
+                // 提取 @ 速率部分
+                let rate = 1.0;
+                let atIndex = part.lastIndexOf('@');
+                let mainPart = part;
+                if (atIndex !== -1) {
+                    const rateStr = part.substring(atIndex + 1).trim();
+                    if (rateStr !== "") {
+                        const parsedRate = parseFloat(rateStr);
+                        if (!isNaN(parsedRate) && parsedRate > 0) rate = parsedRate;
+                        else logMessage(`警告: 速率 "${rateStr}" 无效, 使用1.0`, true);
                     }
-                } else {
-                    fileKey = part;
-                    pitch = 1;
+                    mainPart = part.substring(0, atIndex).trim();
                 }
-                if (fileKey === "") {
-                    logMessage(`警告: 无效条目 "${part}"`, true);
+                
+                // 提取文件名和音高部分 (冒号分隔)
+                let fileName = "";
+                let pitchSpec = "";  // 冒号后面的部分，可能包含 "to"
+                if (mainPart.includes(':')) {
+                    const colonIdx = mainPart.indexOf(':');
+                    fileName = mainPart.substring(0, colonIdx).trim();
+                    pitchSpec = mainPart.substring(colonIdx + 1).trim();
+                } else {
+                    fileName = mainPart;
+                    pitchSpec = "";   // 无音高指定，默认为默认音高1
+                }
+                
+                if (fileName === "") {
+                    logMessage(`警告: 无效条目 "${part}" (缺少文件名)`, true);
                     continue;
                 }
-                // 自动去掉可能误带的扩展名
-                let normalizedKey = fileKey;
+                
+                // 标准化文件名 (去掉可能误带的扩展名)
+                let normalizedKey = fileName.toLowerCase();
                 if (normalizedKey.includes('.')) {
                     normalizedKey = normalizedKey.substring(0, normalizedKey.lastIndexOf('.'));
-                    logMessage(`注意: "${fileKey}" 已去掉后缀 -> "${normalizedKey}"`);
                 }
-                items.push({ fileKey: normalizedKey.toLowerCase(), pitch: pitch, originalRaw: fileKey });
+                
+                // 解析 pitchSpec: 可能为 "3" 或 "3to5" 或 "" 
+                let startSemitone = null;
+                let endSemitone = null;
+                let isDefaultPitch = false;
+                
+                if (pitchSpec === "") {
+                    // 没有冒号后面的内容: 默认音高 1
+                    startSemitone = 1;
+                    endSemitone = null;   // 固定
+                    isDefaultPitch = true;
+                } else {
+                    // 检查是否有 "to"
+                    if (pitchSpec.includes('to')) {
+                        const toParts = pitchSpec.split('to');
+                        if (toParts.length >= 2) {
+                            const startStr = toParts[0].trim();
+                            const endStr = toParts[1].trim();
+                            let startVal = parseFloat(startStr);
+                            let endVal = parseFloat(endStr);
+                            if (!isNaN(startVal) && !isNaN(endVal)) {
+                                startSemitone = startVal;
+                                endSemitone = endVal;
+                            } else {
+                                logMessage(`警告: 滑音格式错误 "${pitchSpec}", 使用默认音高1`, true);
+                                startSemitone = 1;
+                                endSemitone = null;
+                            }
+                        } else {
+                            logMessage(`警告: 滑音格式不完整 "${pitchSpec}", 使用默认音高1`, true);
+                            startSemitone = 1;
+                            endSemitone = null;
+                        }
+                    } else {
+                        // 固定音高数字
+                        const fixedPitch = parseFloat(pitchSpec);
+                        if (!isNaN(fixedPitch)) {
+                            startSemitone = fixedPitch;
+                            endSemitone = null;
+                        } else {
+                            logMessage(`警告: 音高 "${pitchSpec}" 无效, 使用默认1`, true);
+                            startSemitone = 1;
+                            endSemitone = null;
+                        }
+                    }
+                }
+                
+                // 最终存储
+                items.push({
+                    fileKey: normalizedKey,
+                    startSemitone: startSemitone,   // 固定音高或滑音起点
+                    endSemitone: endSemitone,       // null 表示非滑音
+                    globalRate: rate,
+                    originalRaw: fileName,
+                    isDefault: isDefaultPitch
+                });
             }
             return items;
         }
-
-        // 主播放流程
+        
+        // 主播放流程 (增强)
         async function startPlaySequence() {
             stopCurrentPlayback();
             if (fileMap.size === 0) {
-                logMessage("❌ 还没有任何音频文件，请先上传（可追加多个）", true);
+                logMessage("❌ 请先上传音频文件 (可追加多个)", true);
                 return;
             }
-            const sequenceText = document.getElementById('sequenceInput').value;
-            if (!sequenceText.trim()) {
+            const seqText = document.getElementById('sequenceInput').value;
+            if (!seqText.trim()) {
                 logMessage("❌ 播放序列不能为空", true);
                 return;
             }
-            const parsedItems = parseSequence(sequenceText);
+            const parsedItems = parseAdvancedSequence(seqText);
             if (parsedItems.length === 0) {
                 logMessage("❌ 序列无有效条目", true);
                 return;
             }
-
-            // 过滤出存在的文件
+            
+            // 过滤存在文件的任务
             const playTasks = [];
             for (let item of parsedItems) {
                 if (!fileMap.has(item.fileKey)) {
-                    logMessage(`⚠️ 跳过缺失文件: "${item.originalRaw}" (匹配key: ${item.fileKey})`, true);
+                    logMessage(`⚠️ 跳过缺失文件: "${item.originalRaw}" (key: ${item.fileKey})`, true);
                     continue;
                 }
-                playTasks.push({ fileKey: item.fileKey, pitch: item.pitch, originalRaw: item.originalRaw });
+                playTasks.push(item);
             }
             if (playTasks.length === 0) {
                 logMessage("❌ 没有有效的可播放条目", true);
                 return;
             }
-
-            // 初始化并激活 AudioContext
+            
+            // 启动音频上下文
             const ctx = ensureAudioContext();
             try {
                 if (ctx.state === 'suspended') await ctx.resume();
@@ -319,37 +396,50 @@
                 logMessage(`❌ 音频启动失败: ${e.message}`, true);
                 return;
             }
-
+            
             isPlaying = true;
-            currentIndex = 0;
-            logMessage(`▶ 开始播放序列，共 ${playTasks.length} 个片段`);
-
+            logMessage(`▶ 开始播放序列，共 ${playTasks.length} 个音频段 (支持滑音/变速)`);
+            
             for (let i = 0; i < playTasks.length; i++) {
                 if (!isPlaying) break;
-                currentIndex = i;
                 const task = playTasks[i];
                 try {
                     const buffer = await getAudioBuffer(task.fileKey);
                     if (!isPlaying) break;
-                    await playOne(buffer, task.pitch, `${task.originalRaw} (pitch=${task.pitch})`);
+                    
+                    // 构建描述信息
+                    let desc = `${task.originalRaw} `;
+                    if (task.endSemitone !== null) {
+                        desc += `滑音 ${task.startSemitone>=0?'+':''}${task.startSemitone}→${task.endSemitone>=0?'+':''}${task.endSemitone}`;
+                    } else if (task.startSemitone !== null) {
+                        desc += `固定音高 ${task.startSemitone>=0?'+':''}${task.startSemitone}`;
+                    } else {
+                        desc += `音高不变`;
+                    }
+                    if (Math.abs(task.globalRate - 1.0) > 0.001) desc += `  x${task.globalRate.toFixed(2)}速率`;
+                    
+                    await playOneAdvanced(
+                        buffer, 
+                        task.startSemitone, 
+                        task.endSemitone, 
+                        task.globalRate, 
+                        desc
+                    );
                 } catch (err) {
                     if (!isPlaying) break;
                     logMessage(`❌ 播放失败 (${task.originalRaw}): ${err.message}`, true);
-                    // 继续下一个
                 }
             }
             if (isPlaying) {
-                logMessage("✅ 播放完毕");
+                logMessage("✅ 序列播放完毕");
                 isPlaying = false;
                 currentSource = null;
             }
         }
-
-        // ---------- 事件绑定 ----------
+        
+        // ======================= 事件绑定 =======================
         document.getElementById('audioFiles').addEventListener('change', (e) => {
             handleFilesUpload(e.target.files);
-            // 清空 input value，以便再次选择同一个文件也能触发 change (但追加模式无需清空也可)
-            // 为了让用户再次添加同一文件（如修改后重新上传），清空一下比较符合直觉
             e.target.value = '';
         });
         document.getElementById('clearFilesBtn').addEventListener('click', () => {
@@ -358,7 +448,7 @@
         document.getElementById('playBtn').addEventListener('click', () => {
             if (isPlaying) {
                 stopSequence();
-                setTimeout(() => startPlaySequence(), 50);
+                setTimeout(() => startPlaySequence(), 30);
             } else {
                 startPlaySequence();
             }
@@ -366,16 +456,17 @@
         document.getElementById('stopBtn').addEventListener('click', () => {
             stopSequence();
         });
-
+        
         window.addEventListener('beforeunload', () => {
             for (let [key, info] of fileMap.entries()) {
                 if (info.blobUrl) URL.revokeObjectURL(info.blobUrl);
             }
             if (audioContext) audioContext.close();
         });
-
+        
         updateFileListDisplay();
-        logMessage("✅ 就绪。支持追加文件，同名自动覆盖。命令行风格序列，开始创作吧！");
+        logMessage("✅ 超级引擎已启动。语法: 文件名:起点[to终点]@速率   |  例: a:0to5@1.2 ,  a@0.8 (变速不变调) ,  i:2 (变调不变速)");
+        logMessage("🎛️ 滑音自动线性渐变半音，支持负半音，速率独立控制。上传采样开始你的命令创作吧！");
     </script>
 </body>
 </html>
