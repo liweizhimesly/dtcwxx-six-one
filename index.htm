@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>变调速率序列音频播放器 | SoundTouchJS 真·实时引擎 (完全修复版)</title>
+    <title>变调速率序列音频播放器 | SoundTouchJS 真·实时引擎 (终极修复版)</title>
     <style>
         body { font-family: monospace; margin: 20px; background: #fff; max-width: 1000px; }
         textarea, input, button { font-family: monospace; font-size: 14px; }
@@ -80,18 +80,15 @@
     <button id="playBtn">▶ 播放序列</button>
     <button id="stopBtn">⏹ 停止播放</button>
 
-    <div id="status">等待操作...<br>🔄 正在后台预加载 SoundTouchJS 引擎...</div>
+    <div id="status">等待操作...<br>🔄 正在后台预加载引擎...</div>
 
     <script type="module">
-        // ======================= 完全修复版：使用自定义 Worklet + SoundTouch 真正的算法 =======================
-        // 核心改进：
-        // 1. 创建自定义 AudioWorklet，真正集成 SoundTouch 库
-        // 2. 通过 MessagePort 传递参数（保证生效）
-        // 3. 支持实时参数更新
+        // ======================= 终极修复版：使用 ScriptProcessorNode 直接集成 SoundTouch =======================
+        // 避免 AudioWorklet 的 importScripts 问题
         
         let audioContext = null;
-        let soundtouchNode = null;
         let currentSource = null;
+        let currentScriptProcessor = null;
         let currentGlideTimeout = null;
         let isPlayingSequence = false;
         let currentSequenceStopFlag = false;
@@ -101,124 +98,13 @@
         let currentTempo = 1.0;
         let currentSemitones = 0;
         
+        // SoundTouch 实例
+        let soundtouch = null;
+        
         // 半音转pitch倍率
         function semitonesToPitch(semitones) {
             return Math.pow(2, semitones / 12);
         }
-        
-        // ======================= 自定义 Worklet 代码（真正集成 SoundTouch） =======================
-        const workletCode = `
-            // 动态加载 SoundTouch 库
-            let SoundTouch = null;
-            
-            // 尝试加载 SoundTouch
-            async function loadSoundTouch() {
-                if (SoundTouch) return SoundTouch;
-                
-                // 使用 ScriptProcessor 兼容的方式加载
-                return new Promise((resolve, reject) => {
-                    // 检查是否已经全局加载
-                    if (typeof globalThis.SoundTouch !== 'undefined') {
-                        SoundTouch = globalThis.SoundTouch;
-                        resolve(SoundTouch);
-                        return;
-                    }
-                    
-                    // 动态导入
-                    importScripts('https://cdn.jsdelivr.net/npm/soundtouchjs@0.1.30/dist/soundtouch.min.js');
-                    
-                    if (typeof globalThis.SoundTouch !== 'undefined') {
-                        SoundTouch = globalThis.SoundTouch;
-                        resolve(SoundTouch);
-                    } else {
-                        reject(new Error('SoundTouch 加载失败'));
-                    }
-                });
-            }
-            
-            class SoundTouchProcessor extends AudioWorkletProcessor {
-                constructor() {
-                    super();
-                    this.soundtouch = null;
-                    this.initialized = false;
-                    this.tempo = 1.0;
-                    this.pitch = 1.0;
-                    this.buffer = [];
-                    
-                    // 监听主线程消息
-                    this.port.onmessage = async (e) => {
-                        if (e.data.type === 'init') {
-                            try {
-                                await loadSoundTouch();
-                                this.soundtouch = new SoundTouch();
-                                this.soundtouch.tempo = this.tempo;
-                                this.soundtouch.pitch = this.pitch;
-                                this.initialized = true;
-                                this.port.postMessage({ type: 'ready' });
-                            } catch (err) {
-                                this.port.postMessage({ type: 'error', error: err.message });
-                            }
-                        } else if (e.data.type === 'setTempo') {
-                            this.tempo = Math.max(0.5, Math.min(2.0, e.data.value));
-                            if (this.soundtouch) {
-                                this.soundtouch.tempo = this.tempo;
-                            }
-                        } else if (e.data.type === 'setPitch') {
-                            this.pitch = Math.max(0.5, Math.min(2.0, e.data.value));
-                            if (this.soundtouch) {
-                                this.soundtouch.pitch = this.pitch;
-                            }
-                        }
-                    };
-                }
-                
-                process(inputs, outputs, parameters) {
-                    const input = inputs[0];
-                    const output = outputs[0];
-                    
-                    if (!this.initialized || !this.soundtouch) {
-                        // 未初始化时直接传递
-                        if (input && input.length > 0) {
-                            for (let ch = 0; ch < output.length; ch++) {
-                                const inputCh = input[ch] || input[0];
-                                if (inputCh) {
-                                    output[ch].set(inputCh);
-                                }
-                            }
-                        }
-                        return true;
-                    }
-                    
-                    if (input && input.length > 0) {
-                        const numChannels = Math.min(input.length, output.length);
-                        
-                        for (let ch = 0; ch < numChannels; ch++) {
-                            const inputCh = input[ch];
-                            if (inputCh && inputCh.length > 0) {
-                                // 转换为 Float32Array
-                                const samples = new Float32Array(inputCh.length);
-                                samples.set(inputCh);
-                                
-                                // 通过 SoundTouch 处理
-                                this.soundtouch.inputBuffer = samples;
-                                this.soundtouch.extract(samples, samples.length);
-                                
-                                // 输出处理后的数据
-                                output[ch].set(samples);
-                            }
-                        }
-                    }
-                    
-                    return true;
-                }
-            }
-            
-            registerProcessor('soundtouch-processor', SoundTouchProcessor);
-        `;
-        
-        // ======================= 创建 Worklet Blob URL =======================
-        const workletBlob = new Blob([workletCode], { type: 'application/javascript' });
-        const workletUrl = URL.createObjectURL(workletBlob);
         
         // ======================= UI 辅助 =======================
         function logMessage(msg, isError = false) {
@@ -240,11 +126,7 @@
                 return;
             }
             let html = '';
-            let hasRealFile = false;
             for (let [key, info] of fileMap.entries()) {
-                if (key !== '__INTERNAL_TEST_TONE__') {
-                    hasRealFile = true;
-                }
                 html += `<div>🎵 ${key} ← ${info.originalFile?.name || key}</div>`;
             }
             container.innerHTML = html || '暂无文件';
@@ -315,6 +197,10 @@
                 try { currentSource.stop(); } catch(e) {}
                 currentSource = null;
             }
+            if (currentScriptProcessor) {
+                try { currentScriptProcessor.disconnect(); } catch(e) {}
+                currentScriptProcessor = null;
+            }
             if (currentGlideTimeout) {
                 clearTimeout(currentGlideTimeout);
                 currentGlideTimeout = null;
@@ -326,59 +212,52 @@
             logMessage("⏹ 已停止");
         }
         
-        // ======================= 引擎加载 =======================
-        async function preloadEngine() {
-            if (engineReady) return soundtouchNode;
+        // ======================= 加载 SoundTouch 库 =======================
+        async function loadSoundTouchLibrary() {
+            if (window.SoundTouch) return window.SoundTouch;
             
-            const ctx = await initAudioContext();
-            logMessage("🔄 加载 SoundTouchJS Worklet...");
-            
-            try {
-                await ctx.audioWorklet.addModule(workletUrl);
-                logMessage("✅ Worklet 加载成功");
-            } catch (err) {
-                logMessage(`❌ Worklet 加载失败: ${err.message}`, true);
-                throw err;
-            }
-            
-            soundtouchNode = new AudioWorkletNode(ctx, 'soundtouch-processor');
-            
-            // 等待 worklet 初始化完成
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('Worklet 初始化超时'));
-                }, 5000);
-                
-                soundtouchNode.port.onmessage = (e) => {
-                    if (e.data.type === 'ready') {
-                        clearTimeout(timeout);
-                        resolve();
-                    } else if (e.data.type === 'error') {
-                        clearTimeout(timeout);
-                        reject(new Error(e.data.error));
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/soundtouchjs@0.1.30/dist/soundtouch.min.js';
+                script.onload = () => {
+                    if (window.SoundTouch) {
+                        logMessage("✅ SoundTouch 库加载成功");
+                        resolve(window.SoundTouch);
+                    } else {
+                        reject(new Error('SoundTouch 未定义'));
                     }
                 };
-                
-                soundtouchNode.port.postMessage({ type: 'init' });
+                script.onerror = () => reject(new Error('SoundTouch 加载失败'));
+                document.head.appendChild(script);
             });
+        }
+        
+        async function preloadEngine() {
+            if (engineReady) return;
             
-            soundtouchNode.connect(ctx.destination);
+            logMessage("🔄 加载 SoundTouch 库...");
+            await loadSoundTouchLibrary();
             
-            // 设置初始参数
-            soundtouchNode.port.postMessage({ type: 'setTempo', value: currentTempo });
-            soundtouchNode.port.postMessage({ type: 'setPitch', value: semitonesToPitch(currentSemitones) });
+            soundtouch = new SoundTouch();
+            soundtouch.tempo = currentTempo;
+            soundtouch.pitch = semitonesToPitch(currentSemitones);
             
             engineReady = true;
-            logMessage("🎛️ SoundTouchJS 引擎就绪");
-            return soundtouchNode;
+            logMessage("🎛️ SoundTouch 引擎就绪");
         }
         
         async function ensureEngineReady() {
-            if (engineReady) return soundtouchNode;
-            return await preloadEngine();
+            if (!engineReady) await preloadEngine();
         }
         
         // ======================= 实时参数更新 =======================
+        function updateSoundTouchParams(tempo, pitchRatio) {
+            if (soundtouch) {
+                soundtouch.tempo = tempo;
+                soundtouch.pitch = pitchRatio;
+            }
+        }
+        
         function setupRealtimeParams() {
             const tempoSlider = document.getElementById('tempoSlider');
             const pitchSlider = document.getElementById('pitchSlider');
@@ -388,36 +267,117 @@
             tempoSlider.addEventListener('input', (e) => {
                 currentTempo = parseFloat(e.target.value);
                 tempoVal.textContent = currentTempo.toFixed(2);
-                if (soundtouchNode) {
-                    soundtouchNode.port.postMessage({ type: 'setTempo', value: currentTempo });
+                if (soundtouch) {
+                    soundtouch.tempo = currentTempo;
                 }
             });
             
             pitchSlider.addEventListener('input', (e) => {
                 currentSemitones = parseFloat(e.target.value);
                 pitchVal.textContent = currentSemitones;
-                if (soundtouchNode) {
-                    const pitchRatio = semitonesToPitch(currentSemitones);
-                    soundtouchNode.port.postMessage({ type: 'setPitch', value: pitchRatio });
+                if (soundtouch) {
+                    soundtouch.pitch = semitonesToPitch(currentSemitones);
                 }
             });
+        }
+        
+        // ======================= 使用 ScriptProcessorNode 处理音频 =======================
+        function createSoundTouchProcessor(audioBuffer, tempo, semitones) {
+            const ctx = audioContext;
+            const bufferSize = 4096;
+            const processor = ctx.createScriptProcessor(bufferSize, audioBuffer.numberOfChannels, audioBuffer.numberOfChannels);
+            
+            // 创建新的 SoundTouch 实例
+            const st = new SoundTouch();
+            st.tempo = tempo;
+            st.pitch = semitonesToPitch(semitones);
+            
+            // 同步全局实例的参数（用于实时控制）
+            if (soundtouch) {
+                soundtouch.tempo = tempo;
+                soundtouch.pitch = semitonesToPitch(semitones);
+            }
+            
+            let sourcePosition = 0;
+            const channelData = [];
+            for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+                channelData.push(audioBuffer.getChannelData(ch));
+            }
+            
+            processor.onaudioprocess = (e) => {
+                const outputBuffer = e.outputBuffer;
+                const numChannels = outputBuffer.numberOfChannels;
+                const outputLength = outputBuffer.length;
+                
+                // 清空输出缓冲区
+                for (let ch = 0; ch < numChannels; ch++) {
+                    outputBuffer.getChannelData(ch).fill(0);
+                }
+                
+                if (sourcePosition >= audioBuffer.length) {
+                    return;
+                }
+                
+                // 处理每个声道
+                for (let ch = 0; ch < numChannels; ch++) {
+                    const sourceCh = Math.min(ch, channelData.length - 1);
+                    const inputData = channelData[sourceCh];
+                    
+                    // 计算需要读取的样本数
+                    const remaining = audioBuffer.length - sourcePosition;
+                    const needSamples = Math.min(outputLength, remaining);
+                    
+                    if (needSamples <= 0) continue;
+                    
+                    // 获取一段音频数据
+                    const chunk = inputData.slice(sourcePosition, sourcePosition + needSamples);
+                    
+                    // 通过 SoundTouch 处理
+                    st.inputBuffer = chunk;
+                    const processed = new Float32Array(needSamples);
+                    st.extract(processed, needSamples);
+                    
+                    // 写入输出缓冲区
+                    const outputData = outputBuffer.getChannelData(ch);
+                    outputData.set(processed);
+                }
+                
+                sourcePosition += outputLength;
+            };
+            
+            return processor;
         }
         
         // ======================= 播放函数 =======================
         async function playAudioBuffer(audioBuffer, tempo, semitones, onEnd = null) {
             try {
                 const ctx = await initAudioContext();
-                const stNode = await ensureEngineReady();
+                await ensureEngineReady();
                 
-                if (currentSource) {
-                    try { currentSource.stop(); } catch(e) {}
-                    currentSource = null;
-                }
+                stopAllPlayback();
                 
-                // 通过 MessagePort 设置参数
-                stNode.port.postMessage({ type: 'setTempo', value: tempo });
-                const pitchRatio = semitonesToPitch(semitones);
-                stNode.port.postMessage({ type: 'setPitch', value: pitchRatio });
+                // 创建处理器
+                currentScriptProcessor = createSoundTouchProcessor(audioBuffer, tempo, semitones);
+                currentScriptProcessor.connect(ctx.destination);
+                
+                // 创建并播放源
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(currentScriptProcessor);
+                currentSource = source;
+                
+                source.onended = () => {
+                    if (currentSource === source) {
+                        currentSource = null;
+                        if (currentScriptProcessor) {
+                            currentScriptProcessor.disconnect();
+                            currentScriptProcessor = null;
+                        }
+                    }
+                    if (onEnd) onEnd();
+                };
+                
+                source.start();
                 
                 currentTempo = tempo;
                 currentSemitones = semitones;
@@ -426,22 +386,10 @@
                 document.getElementById('tempoValue').textContent = tempo.toFixed(2);
                 document.getElementById('pitchValue').textContent = semitones;
                 
-                const source = ctx.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(stNode);
-                currentSource = source;
-                
-                source.onended = () => {
-                    if (currentSource === source) currentSource = null;
-                    if (onEnd) onEnd();
-                };
-                
-                source.start();
-                
                 const modeStr = (Math.abs(tempo - 1.0) > 0.001 && Math.abs(semitones) > 0.001) ? '变速+变调' :
                                 (Math.abs(tempo - 1.0) > 0.001) ? `变速不变调 x${tempo.toFixed(2)}` :
                                 (Math.abs(semitones) > 0.001) ? `变调不变速 ${semitones >= 0 ? '+' : ''}${semitones}半音` : '原速原调';
-                logMessage(`🎵 播放中 | ${modeStr} | 时长: ${audioBuffer.duration.toFixed(2)}秒`);
+                logMessage(`🎵 播放中 | ${modeStr} | 时长: ${(audioBuffer.duration / tempo).toFixed(2)}秒`);
                 
             } catch (err) {
                 logMessage(`❌ 播放失败: ${err.message}`, true);
@@ -452,52 +400,47 @@
         async function playAudioBufferWithGlide(audioBuffer, startSemitones, endSemitones, tempo, onEnd = null) {
             try {
                 const ctx = await initAudioContext();
-                const stNode = await ensureEngineReady();
+                await ensureEngineReady();
                 
-                if (currentSource) {
-                    try { currentSource.stop(); } catch(e) {}
-                    currentSource = null;
-                }
+                stopAllPlayback();
                 
                 const duration = audioBuffer.duration;
-                const startTime = ctx.currentTime;
+                const actualDuration = duration / tempo;
                 
+                // 创建处理器（使用起始音高）
+                currentScriptProcessor = createSoundTouchProcessor(audioBuffer, tempo, startSemitones);
+                currentScriptProcessor.connect(ctx.destination);
+                
+                // 创建源
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(currentScriptProcessor);
+                currentSource = source;
+                
+                // 音高渐变
+                const steps = 50;
+                const stepTime = actualDuration / steps;
                 const startPitch = semitonesToPitch(startSemitones);
                 const endPitch = semitonesToPitch(endSemitones);
                 
-                stNode.port.postMessage({ type: 'setTempo', value: tempo });
-                
-                // 初始音高
-                stNode.port.postMessage({ type: 'setPitch', value: startPitch });
-                
-                // 创建音高渐变（通过定时器模拟）
-                const steps = 50;
-                const stepTime = duration / steps;
-                
                 for (let i = 1; i <= steps; i++) {
                     setTimeout(() => {
-                        if (currentSource) {
+                        if (soundtouch) {
                             const progress = i / steps;
                             const currentPitch = startPitch + (endPitch - startPitch) * progress;
-                            stNode.port.postMessage({ type: 'setPitch', value: currentPitch });
+                            soundtouch.pitch = currentPitch;
                         }
                     }, i * stepTime * 1000);
                 }
                 
-                currentTempo = tempo;
-                currentSemitones = startSemitones;
-                document.getElementById('tempoSlider').value = tempo;
-                document.getElementById('pitchSlider').value = startSemitones;
-                document.getElementById('tempoValue').textContent = tempo.toFixed(2);
-                document.getElementById('pitchValue').textContent = startSemitones;
-                
-                const source = ctx.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(stNode);
-                currentSource = source;
-                
                 source.onended = () => {
-                    if (currentSource === source) currentSource = null;
+                    if (currentSource === source) {
+                        currentSource = null;
+                        if (currentScriptProcessor) {
+                            currentScriptProcessor.disconnect();
+                            currentScriptProcessor = null;
+                        }
+                    }
                     if (currentGlideTimeout) {
                         clearTimeout(currentGlideTimeout);
                         currentGlideTimeout = null;
@@ -506,14 +449,21 @@
                 };
                 
                 source.start();
-                logMessage(`🎵 滑音播放 | ${startSemitones >= 0 ? '+' : ''}${startSemitones} → ${endSemitones >= 0 ? '+' : ''}${endSemitones} 半音 | 时长: ${duration.toFixed(2)}秒`);
                 
-                // 结束时更新滑块
+                currentTempo = tempo;
+                currentSemitones = startSemitones;
+                document.getElementById('tempoSlider').value = tempo;
+                document.getElementById('pitchSlider').value = startSemitones;
+                document.getElementById('tempoValue').textContent = tempo.toFixed(2);
+                document.getElementById('pitchValue').textContent = startSemitones;
+                
+                logMessage(`🎵 滑音播放 | ${startSemitones >= 0 ? '+' : ''}${startSemitones} → ${endSemitones >= 0 ? '+' : ''}${endSemitones} 半音 | 实际时长: ${actualDuration.toFixed(2)}秒`);
+                
                 currentGlideTimeout = setTimeout(() => {
                     document.getElementById('pitchSlider').value = endSemitones;
                     document.getElementById('pitchValue').textContent = endSemitones;
                     currentSemitones = endSemitones;
-                }, duration * 1000);
+                }, actualDuration * 1000);
                 
             } catch (err) {
                 logMessage(`❌ 滑音播放失败: ${err.message}`, true);
@@ -700,8 +650,8 @@
             logMessage(`❌ 引擎初始化失败: ${err.message}`, true);
         });
         
-        logMessage("✅ 完全修复版引擎启动 | 使用自定义 Worklet + MessagePort | 参数保证生效");
-        logMessage("🔧 核心修复: 集成真正的 SoundTouch 库，通过 MessagePort 传递参数");
+        logMessage("✅ 终极修复版启动 | 使用 ScriptProcessorNode + SoundTouch 库");
+        logMessage("🔧 核心修复: 直接在主线程使用 SoundTouch，避免 AudioWorklet 的兼容性问题");
     </script>
 </body>
 </html>
