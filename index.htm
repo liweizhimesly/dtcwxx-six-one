@@ -54,11 +54,11 @@
     <!-- 序列输入区 -->
     <div>
         <h3>📜 播放序列编辑</h3>
-        <textarea id="sequenceInput" rows="4" cols="80" placeholder="支持格式示例:&#10;a:0@1.0          (文件名a, 原调原速)&#10;i:+5              (文件名i, 升5半音, 速度默认1.0)&#10;u:@0.8            (文件名u, 音高默认0, 0.8倍速)&#10;ka:0to5@1.0       (滑音: 从0半音升至5半音)&#10;multi:to+3@1.2    (滑音: 从默认0升至+3半音)"></textarea>
+        <textarea id="sequenceInput" rows="4" cols="80" placeholder="示例:&#10;a:0@1          (文件名a, 原调原速)&#10;i:+5            (文件名i, 升5半音)&#10;u:@0.8          (文件名u, 0.8倍速)&#10;ka:0to5@1.2     (滑音: 0→5半音)"></textarea>
         <div style="margin-top:4px;">
             <strong>格式说明：</strong> 基本格式 <code>文件名:音高参数@速度系数</code><br>
             • <strong>文件名</strong>：必填，不含扩展名<br>
-            • <strong>音高参数</strong>：可选，默认0。支持 <code>+5</code>、<code>-3</code>、<code>0to12</code>、<code>to+7</code>(从默认0开始)、<code>-5to</code>(结束默认0)<br>
+            • <strong>音高参数</strong>：可选，默认0。支持 <code>+5</code>、<code>-3</code>、<code>0to12</code><br>
             • <strong>速度系数</strong>：可选，默认1.0，范围0.5~2.0<br>
             • 多个条目用英文逗号分隔
         </div>
@@ -83,20 +83,41 @@
     <script type="importmap">
         {
             "imports": {
-                "soundtouchjs": "https://cdn.jsdelivr.net/npm/soundtouchjs@0.3.0/dist/soundtouch.js"
+                "soundtouchjs": "https://unpkg.com/@soundtouchjs/browser@0.1.0/dist/soundtouch.js"
             }
         }
     </script>
 
     <script type="module">
-        // 导入 SoundTouchJS
-        import { PitchShifter } from 'soundtouchjs';
+        // 尝试导入 SoundTouchJS
+        let PitchShifterClass = null;
+        
+        try {
+            const module = await import('soundtouchjs');
+            PitchShifterClass = module.PitchShifter || module.default?.PitchShifter;
+            if (!PitchShifterClass) {
+                // 尝试其他导出方式
+                for (const key in module) {
+                    if (key.toLowerCase().includes('pitch') || key.toLowerCase().includes('shifter')) {
+                        PitchShifterClass = module[key];
+                        break;
+                    }
+                }
+            }
+            console.log('模块加载:', module);
+        } catch(e) {
+            console.error('导入失败:', e);
+        }
+        
+        // 如果没有找到 PitchShifter，使用备选方案：基于 Web Audio API 的手动实现
+        // 使用 ScriptProcessorNode + 简单的变速变调算法
         
         // ---------- 全局变量 ----------
         let audioCtx = null;
-        let currentShifter = null;
         let isPlaying = false;
         let stopRequested = false;
+        let currentSourceNode = null;
+        let currentScriptNode = null;
         
         // 存储已解码的音频数据
         const audioBufferMap = new Map();
@@ -130,7 +151,188 @@
             }
         }
         
-        // 解析音高字符串（支持 +5, -3, 0to12, to+7, -5to 等格式）
+        // 半音转频率比率
+        function semitonesToRatio(semitones) {
+            return Math.pow(2, semitones / 12);
+        }
+        
+        // 简单的音频播放器（使用内置变速变调 - 通过改变播放速率和重采样）
+        // 注意：这是一个简化实现，真正的 SoundTouch 需要更复杂的处理
+        async function playSimpleBuffer(buffer, tempo, pitchSemitones, glideOptions = null) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    if (!audioCtx) {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    if (audioCtx.state === 'suspended') {
+                        await audioCtx.resume();
+                    }
+                    
+                    if (isPlaying) {
+                        if (currentSourceNode) {
+                            try { currentSourceNode.stop(); } catch(e) {}
+                        }
+                        if (currentScriptNode) {
+                            try { currentScriptNode.disconnect(); } catch(e) {}
+                        }
+                        isPlaying = false;
+                        await new Promise(r => setTimeout(r, 50));
+                    }
+                    
+                    stopRequested = false;
+                    
+                    // 计算最终播放速率：速度系数 * 音高系数
+                    // 音高通过改变播放速率实现
+                    const pitchRatio = semitonesToRatio(pitchSemitones);
+                    const playbackRate = tempo * pitchRatio;
+                    
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    source.playbackRate.value = playbackRate;
+                    source.connect(audioCtx.destination);
+                    source.start();
+                    
+                    currentSourceNode = source;
+                    isPlaying = true;
+                    
+                    // 处理滑音
+                    if (glideOptions && glideOptions.start !== undefined && glideOptions.end !== undefined && glideOptions.start !== glideOptions.end) {
+                        isGlideActive = true;
+                        glideStartPitch = glideOptions.start;
+                        glideEndPitch = glideOptions.end;
+                        glideDuration = buffer.duration / tempo; // 实际播放时长
+                        glideStartTime = audioCtx.currentTime;
+                        
+                        function updateGlide() {
+                            if (!isPlaying || !isGlideActive || !currentSourceNode) {
+                                glideAnimationId = null;
+                                return;
+                            }
+                            const elapsed = audioCtx.currentTime - glideStartTime;
+                            let ratio = Math.min(1.0, elapsed / glideDuration);
+                            if (ratio >= 1.0) {
+                                const finalRatio = semitonesToRatio(glideEndPitch);
+                                currentSourceNode.playbackRate.value = tempo * finalRatio;
+                                isGlideActive = false;
+                                glideAnimationId = null;
+                            } else {
+                                const currentPitchVal = glideStartPitch + (glideEndPitch - glideStartPitch) * ratio;
+                                const currentRatio = semitonesToRatio(currentPitchVal);
+                                currentSourceNode.playbackRate.value = tempo * currentRatio;
+                                glideAnimationId = requestAnimationFrame(updateGlide);
+                            }
+                        }
+                        glideAnimationId = requestAnimationFrame(updateGlide);
+                    }
+                    
+                    source.onended = () => {
+                        if (glideAnimationId) {
+                            cancelAnimationFrame(glideAnimationId);
+                            glideAnimationId = null;
+                        }
+                        isPlaying = false;
+                        isGlideActive = false;
+                        currentSourceNode = null;
+                        resolve();
+                    };
+                    
+                } catch (err) {
+                    addLog(`播放失败: ${err.message}`, true);
+                    reject(err);
+                }
+            });
+        }
+        
+        // 播放函数（选择使用哪个引擎）
+        let playBufferFunction = playSimpleBuffer;
+        
+        // 尝试使用真正的 SoundTouch 引擎
+        async function initSoundTouch() {
+            if (PitchShifterClass) {
+                addLog("✅ 使用 SoundTouchJS 高级引擎");
+                // 实现真正的 SoundTouch 播放
+                playBufferFunction = async (buffer, tempo, pitchSemitones, glideOptions) => {
+                    return new Promise(async (resolve, reject) => {
+                        try {
+                            if (!audioCtx) {
+                                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                            }
+                            if (audioCtx.state === 'suspended') {
+                                await audioCtx.resume();
+                            }
+                            
+                            if (isPlaying) {
+                                if (currentSourceNode) {
+                                    try { currentSourceNode.stop(); } catch(e) {}
+                                }
+                                isPlaying = false;
+                                await new Promise(r => setTimeout(r, 50));
+                            }
+                            
+                            stopRequested = false;
+                            
+                            // 使用 PitchShifter
+                            const shifter = new PitchShifterClass(audioCtx, buffer);
+                            shifter.tempo = tempo;
+                            shifter.pitchSemitones = pitchSemitones;
+                            
+                            const gainNode = audioCtx.createGain();
+                            gainNode.connect(audioCtx.destination);
+                            shifter.connect(gainNode);
+                            
+                            currentSourceNode = shifter;
+                            isPlaying = true;
+                            
+                            // 处理滑音
+                            if (glideOptions && glideOptions.start !== undefined && glideOptions.end !== undefined && glideOptions.start !== glideOptions.end) {
+                                isGlideActive = true;
+                                glideStartPitch = glideOptions.start;
+                                glideEndPitch = glideOptions.end;
+                                glideDuration = buffer.duration / tempo;
+                                glideStartTime = audioCtx.currentTime;
+                                
+                                function updateGlide() {
+                                    if (!isPlaying || !isGlideActive || !currentSourceNode) {
+                                        glideAnimationId = null;
+                                        return;
+                                    }
+                                    const elapsed = audioCtx.currentTime - glideStartTime;
+                                    let ratio = Math.min(1.0, elapsed / glideDuration);
+                                    if (ratio >= 1.0) {
+                                        currentSourceNode.pitchSemitones = glideEndPitch;
+                                        isGlideActive = false;
+                                        glideAnimationId = null;
+                                    } else {
+                                        const newPitch = glideStartPitch + (glideEndPitch - glideStartPitch) * ratio;
+                                        currentSourceNode.pitchSemitones = newPitch;
+                                        glideAnimationId = requestAnimationFrame(updateGlide);
+                                    }
+                                }
+                                glideAnimationId = requestAnimationFrame(updateGlide);
+                            }
+                            
+                            // 监听结束（需要查看 PitchShifter 的事件）
+                            setTimeout(() => {
+                                if (isPlaying && currentSourceNode === shifter) {
+                                    isPlaying = false;
+                                    isGlideActive = false;
+                                    resolve();
+                                }
+                            }, buffer.duration / tempo * 1000 + 100);
+                            
+                        } catch(err) {
+                            reject(err);
+                        }
+                    });
+                };
+                return true;
+            } else {
+                addLog("⚠️ SoundTouchJS 引擎不可用，使用内置引擎（变速变调功能有限）");
+                return false;
+            }
+        }
+        
+        // 解析音高字符串
         function parsePitch(str) {
             if (!str || str.trim() === '') return 0;
             str = str.trim();
@@ -141,28 +343,7 @@
             return 0;
         }
         
-        // 解析音高对（支持滑音）
-        function parsePitchPair(pitchPart) {
-            let startPitch = 0;
-            let endPitch = null;
-            
-            if (!pitchPart || pitchPart === '') {
-                return { start: 0, end: null };
-            }
-            
-            if (pitchPart.includes('to')) {
-                const [startStr, endStr] = pitchPart.split('to');
-                startPitch = parsePitch(startStr);
-                endPitch = parsePitch(endStr);
-            } else {
-                startPitch = parsePitch(pitchPart);
-                endPitch = null;
-            }
-            
-            return { start: startPitch, end: endPitch };
-        }
-        
-        // 解析序列字符串（支持省略参数，使用默认值）
+        // 解析序列
         function parseSequence(inputStr) {
             if (!inputStr || inputStr.trim() === '') {
                 return [];
@@ -172,18 +353,16 @@
             const tasks = [];
             
             for (let part of parts) {
-                // 默认值
                 let fileName = '';
                 let pitchPart = '';
                 let tempoVal = 1.0;
                 
-                // 处理 @ 速度系数（可选）
+                // 处理 @ 速度系数
                 if (part.includes('@')) {
                     const atIndex = part.lastIndexOf('@');
                     const beforeAt = part.substring(0, atIndex);
                     const afterAt = part.substring(atIndex + 1);
                     
-                    // 解析速度系数
                     if (afterAt && afterAt.trim()) {
                         tempoVal = parseFloat(afterAt);
                         if (isNaN(tempoVal)) tempoVal = 1.0;
@@ -192,65 +371,54 @@
                     part = beforeAt;
                 }
                 
-                // 处理 : 分隔文件名和音高参数
+                // 处理 :
                 const colonIndex = part.indexOf(':');
                 if (colonIndex === -1) {
-                    addLog(`无效序列格式(缺少冒号): ${part}`, true);
-                    continue;
+                    // 允许只有文件名的情况
+                    fileName = part.trim();
+                    pitchPart = '';
+                } else {
+                    fileName = part.substring(0, colonIndex).trim();
+                    pitchPart = part.substring(colonIndex + 1).trim();
                 }
-                
-                fileName = part.substring(0, colonIndex).trim();
-                pitchPart = part.substring(colonIndex + 1).trim();
                 
                 if (!fileName) {
-                    addLog(`无效序列格式(缺少文件名): ${part}`, true);
+                    addLog(`无效序列格式: ${part}`, true);
                     continue;
                 }
                 
-                // 解析音高参数（支持滑音，支持省略）
-                const { start: startPitch, end: endPitch } = parsePitchPair(pitchPart);
+                // 解析音高
+                let startPitch = 0;
+                let glideTo = null;
+                
+                if (pitchPart && pitchPart.includes('to')) {
+                    const [startStr, endStr] = pitchPart.split('to');
+                    startPitch = parsePitch(startStr);
+                    glideTo = parsePitch(endStr);
+                } else if (pitchPart) {
+                    startPitch = parsePitch(pitchPart);
+                }
                 
                 tasks.push({
                     fileKey: fileName,
                     startPitch: startPitch,
-                    glideTo: endPitch,  // 如果为null表示无滑音
+                    glideTo: glideTo,
                     tempo: tempoVal
                 });
-                
-                // 日志输出解析结果
-                if (endPitch !== null && endPitch !== startPitch) {
-                    addLog(`解析: ${fileName} | 滑音 ${startPitch} → ${endPitch} @ ${tempoVal}x`);
-                } else {
-                    addLog(`解析: ${fileName} | 音高 ${startPitch} @ ${tempoVal}x`);
-                }
             }
             
             return tasks;
         }
         
-        // 初始化 AudioContext
-        async function initAudioContext() {
-            if (audioCtx && audioCtx.state !== 'closed') {
-                if (audioCtx.state === 'suspended') {
-                    await audioCtx.resume();
-                }
-                return audioCtx;
-            }
-            
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            addLog("AudioContext 创建成功");
-            return audioCtx;
-        }
-        
-        // 停止当前播放
+        // 停止播放
         async function stopPlayback() {
             stopRequested = true;
-            if (currentShifter) {
+            if (currentSourceNode) {
                 try {
-                    currentShifter.off();
-                    currentShifter.disconnect();
+                    if (currentSourceNode.stop) currentSourceNode.stop();
+                    if (currentSourceNode.disconnect) currentSourceNode.disconnect();
                 } catch(e) {}
-                currentShifter = null;
+                currentSourceNode = null;
             }
             if (glideAnimationId) {
                 cancelAnimationFrame(glideAnimationId);
@@ -259,94 +427,6 @@
             isPlaying = false;
             isGlideActive = false;
             addLog("播放已停止。");
-        }
-        
-        // 播放单个 AudioBuffer
-        async function playBufferWithShifter(buffer, tempo, pitchSemitones, glideOptions = null) {
-            return new Promise(async (resolve, reject) => {
-                try {
-                    await initAudioContext();
-                    if (audioCtx.state !== 'running') {
-                        await audioCtx.resume();
-                    }
-                    
-                    // 停止之前的播放
-                    if (isPlaying) {
-                        await stopPlayback();
-                        await new Promise(r => setTimeout(r, 50));
-                    }
-                    
-                    stopRequested = false;
-                    
-                    // 创建 PitchShifter 实例
-                    const shifter = new PitchShifter(audioCtx, buffer, 16384);
-                    
-                    // 设置参数
-                    shifter.tempo = tempo;
-                    shifter.pitchSemitones = pitchSemitones;
-                    
-                    // 创建 GainNode
-                    const gainNode = audioCtx.createGain();
-                    gainNode.connect(audioCtx.destination);
-                    shifter.connect(gainNode);
-                    
-                    currentShifter = shifter;
-                    
-                    // 监听播放完成
-                    const onFinish = () => {
-                        if (glideAnimationId) {
-                            cancelAnimationFrame(glideAnimationId);
-                            glideAnimationId = null;
-                        }
-                        isPlaying = false;
-                        isGlideActive = false;
-                        try {
-                            shifter.disconnect();
-                        } catch(e) {}
-                        if (currentShifter === shifter) currentShifter = null;
-                        resolve();
-                    };
-                    
-                    shifter.on('end', onFinish);
-                    
-                    // 处理滑音
-                    if (glideOptions && glideOptions.start !== undefined && glideOptions.end !== undefined && glideOptions.start !== glideOptions.end) {
-                        isGlideActive = true;
-                        glideStartPitch = glideOptions.start;
-                        glideEndPitch = glideOptions.end;
-                        glideDuration = buffer.duration;
-                        glideStartTime = audioCtx.currentTime;
-                        
-                        shifter.pitchSemitones = glideStartPitch;
-                        
-                        function updateGlide() {
-                            if (!isPlaying || !isGlideActive || !currentShifter || currentShifter !== shifter) {
-                                glideAnimationId = null;
-                                return;
-                            }
-                            const elapsed = audioCtx.currentTime - glideStartTime;
-                            let ratio = Math.min(1.0, elapsed / glideDuration);
-                            if (ratio >= 1.0) {
-                                shifter.pitchSemitones = glideEndPitch;
-                                isGlideActive = false;
-                                glideAnimationId = null;
-                            } else {
-                                const newPitch = glideStartPitch + (glideEndPitch - glideStartPitch) * ratio;
-                                shifter.pitchSemitones = newPitch;
-                                glideAnimationId = requestAnimationFrame(updateGlide);
-                            }
-                        }
-                        glideAnimationId = requestAnimationFrame(updateGlide);
-                    }
-                    
-                    isPlaying = true;
-                    
-                } catch (err) {
-                    addLog(`播放失败: ${err.message}`, true);
-                    isPlaying = false;
-                    reject(err);
-                }
-            });
         }
         
         // 序列播放
@@ -372,7 +452,6 @@
                     continue;
                 }
                 
-                // 准备滑音参数
                 let glideOpt = null;
                 if (task.glideTo !== null && task.startPitch !== task.glideTo) {
                     glideOpt = { start: task.startPitch, end: task.glideTo };
@@ -381,20 +460,18 @@
                     addLog(`▶️ 播放: ${task.fileKey} | 音高: ${task.startPitch}半音 | 速度: ${task.tempo}`);
                 }
                 
-                // 更新全局实时参数
                 currentTempo = task.tempo;
                 currentPitch = task.startPitch;
                 
-                // 同步 UI 滑块
                 document.getElementById('tempoSlider').value = currentTempo;
                 document.getElementById('tempoValue').innerText = currentTempo.toFixed(2);
                 document.getElementById('pitchSlider').value = currentPitch;
                 document.getElementById('pitchValue').innerText = currentPitch;
                 
                 try {
-                    await playBufferWithShifter(buffer, task.tempo, task.startPitch, glideOpt);
+                    await playBufferFunction(buffer, task.tempo, task.startPitch, glideOpt);
                 } catch (err) {
-                    addLog(`播放片段失败: ${err.message}`, true);
+                    addLog(`播放失败: ${err.message}`, true);
                     break;
                 }
             }
@@ -414,7 +491,9 @@
             }
             
             try {
-                await initAudioContext();
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
                 const arrayBuf = await file.arrayBuffer();
                 const decoded = await audioCtx.decodeAudioData(arrayBuf);
                 audioBufferMap.set(name, decoded);
@@ -434,7 +513,7 @@
                 document.getElementById('fileListContent').innerText = names.join(', ');
                 let info = '';
                 for (let [k, buf] of audioBufferMap.entries()) {
-                    info += `${k}[${buf.duration.toFixed(1)}s/${(buf.sampleRate/1000).toFixed(0)}kHz/${buf.numberOfChannels}ch] `;
+                    info += `${k}[${buf.duration.toFixed(1)}s/${buf.sampleRate/1000}kHz/${buf.numberOfChannels}ch] `;
                 }
                 document.getElementById('fileInfoArea').innerText = info;
             }
@@ -446,7 +525,7 @@
             addLog("已清空所有音频文件。");
         }
         
-        // 生成正弦波测试音频
+        // 生成正弦波
         function createSineBuffer(ctx, freq, durationSec) {
             const sampleRate = ctx.sampleRate;
             const length = sampleRate * durationSec;
@@ -460,40 +539,40 @@
         
         // 测试功能
         async function runTest(type) {
-            await initAudioContext();
-            const testBuffer = createSineBuffer(audioCtx, 440, 2.5);
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+            
+            const testBuffer = createSineBuffer(audioCtx, 440, 2);
             await stopPlayback();
             
             if (type === 'tempo') {
                 addLog("🧪 测试1: 变速演示 0.5x → 1.0x → 1.5x");
                 for (let t of [0.5, 1.0, 1.5]) {
                     if (stopRequested) break;
-                    currentTempo = t;
-                    document.getElementById('tempoSlider').value = t;
-                    document.getElementById('tempoValue').innerText = t.toFixed(2);
-                    await playBufferWithShifter(testBuffer, t, 0, null);
-                    await new Promise(r => setTimeout(r, 100));
+                    await playBufferFunction(testBuffer, t, 0, null);
+                    await new Promise(r => setTimeout(r, 200));
                 }
                 addLog("✅ 变速演示完成");
             } else if (type === 'pitch') {
                 addLog("🧪 测试2: 变调演示 -5半音 → 0 → +5半音");
                 for (let p of [-5, 0, 5]) {
                     if (stopRequested) break;
-                    currentPitch = p;
-                    document.getElementById('pitchSlider').value = p;
-                    document.getElementById('pitchValue').innerText = p;
-                    await playBufferWithShifter(testBuffer, 1.0, p, null);
-                    await new Promise(r => setTimeout(r, 100));
+                    await playBufferFunction(testBuffer, 1.0, p, null);
+                    await new Promise(r => setTimeout(r, 200));
                 }
                 addLog("✅ 变调演示完成");
             } else if (type === 'glide') {
                 addLog("🧪 测试3: 滑音演示 从原调平滑升至+12半音");
-                await playBufferWithShifter(testBuffer, 1.0, 0, { start: 0, end: 12 });
+                await playBufferFunction(testBuffer, 1.0, 0, { start: 0, end: 12 });
                 addLog("✅ 滑音演示完成");
             }
         }
         
-        // 绑定 UI 事件
+        // UI 事件绑定
         document.getElementById('fileInput').addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             for (let f of files) await loadAudioFile(f);
@@ -503,7 +582,13 @@
         document.getElementById('clearFilesBtn').addEventListener('click', clearAllFiles);
         
         document.getElementById('playSequenceBtn').addEventListener('click', async () => {
-            await initAudioContext();
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+            
             const seqRaw = document.getElementById('sequenceInput').value;
             if (!seqRaw.trim()) {
                 addLog("序列为空，请输入内容", true);
@@ -521,31 +606,6 @@
             stopPlayback();
         });
         
-        // 实时参数滑块
-        document.getElementById('tempoSlider').addEventListener('input', (e) => {
-            currentTempo = parseFloat(e.target.value);
-            document.getElementById('tempoValue').innerText = currentTempo.toFixed(2);
-            if (currentShifter && isPlaying && !isGlideActive) {
-                try {
-                    currentShifter.tempo = currentTempo;
-                } catch(e) {}
-            }
-        });
-        
-        document.getElementById('pitchSlider').addEventListener('input', (e) => {
-            if (isGlideActive) {
-                addLog("滑音播放中，实时音高将在当前任务结束后生效", false);
-                return;
-            }
-            currentPitch = parseInt(e.target.value);
-            document.getElementById('pitchValue').innerText = currentPitch;
-            if (currentShifter && isPlaying && !isGlideActive) {
-                try {
-                    currentShifter.pitchSemitones = currentPitch;
-                } catch(e) {}
-            }
-        });
-        
         // 测试按钮
         document.getElementById('testTempoBtn').onclick = () => runTest('tempo');
         document.getElementById('testPitchBtn').onclick = () => runTest('pitch');
@@ -555,13 +615,9 @@
         (async () => {
             try {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                addLog("✅ SoundTouchJS 引擎已就绪");
-                addLog("📝 支持格式示例:");
-                addLog("   • a:0@1       - 文件名a, 音高0, 速度1");
-                addLog("   • b:+5        - 文件名b, 音高+5, 速度默认1.0");
-                addLog("   • c:@0.8      - 文件名c, 音高默认0, 速度0.8");
-                addLog("   • d:0to5      - 文件名d, 滑音0→5, 速度默认1.0");
-                addLog("   • e:to+3@1.2  - 文件名e, 滑音0→+3, 速度1.2");
+                await initSoundTouch();
+                addLog("✅ 引擎已就绪，点击播放序列或测试按钮开始");
+                addLog("📝 示例: 输入 a:0 然后点击播放序列");
             } catch (err) {
                 addLog(`❌ 初始化失败: ${err.message}`, true);
             }
