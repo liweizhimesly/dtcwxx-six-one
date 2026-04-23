@@ -8,6 +8,7 @@
 <body>
     <h1>🎵 变调变速音频序列播放器 (SoundTouchJS 引擎)</h1>
     <p><strong>核心功能</strong>：上传音频文件，定义序列(文件名:起始音高[to结束音高]@速度系数)，实时变速变调，支持滑音效果</p>
+    <p><strong>默认值</strong>：音高默认0半音，速度系数默认1.0，滑音时结束音高默认等于起始音高</p>
     <hr>
 
     <!-- 测试区 -->
@@ -52,11 +53,14 @@
 
     <!-- 序列输入区 -->
     <div>
-        <h3>📜 播放序列编辑 (语法: 文件名:起始音高[to结束音高]@速度系数)</h3>
-        <textarea id="sequenceInput" rows="4" cols="80" placeholder="示例:&#10;a:0@1.0, i:+5@1.0, u:0@0.8, ka:0to5@1.0"></textarea>
+        <h3>📜 播放序列编辑</h3>
+        <textarea id="sequenceInput" rows="4" cols="80" placeholder="支持格式示例:&#10;a:0@1.0          (文件名a, 原调原速)&#10;i:+5              (文件名i, 升5半音, 速度默认1.0)&#10;u:@0.8            (文件名u, 音高默认0, 0.8倍速)&#10;ka:0to5@1.0       (滑音: 从0半音升至5半音)&#10;multi:to+3@1.2    (滑音: 从默认0升至+3半音)"></textarea>
         <div style="margin-top:4px;">
-            <strong>格式说明：</strong> 多个条目用英文逗号分隔；音高单位半音(+5升5, -3降3)；滑音用to连接起始和结束；速度系数范围0.5~2.0。<br>
-            ⚠️ 文件名匹配已上传音频(不含扩展名)，不存在时会跳过并提示。
+            <strong>格式说明：</strong> 基本格式 <code>文件名:音高参数@速度系数</code><br>
+            • <strong>文件名</strong>：必填，不含扩展名<br>
+            • <strong>音高参数</strong>：可选，默认0。支持 <code>+5</code>、<code>-3</code>、<code>0to12</code>、<code>to+7</code>(从默认0开始)、<code>-5to</code>(结束默认0)<br>
+            • <strong>速度系数</strong>：可选，默认1.0，范围0.5~2.0<br>
+            • 多个条目用英文逗号分隔
         </div>
     </div>
     <hr>
@@ -85,12 +89,12 @@
     </script>
 
     <script type="module">
-        // 导入 SoundTouchJS - 使用稳定版本
+        // 导入 SoundTouchJS
         import { PitchShifter } from 'soundtouchjs';
         
         // ---------- 全局变量 ----------
         let audioCtx = null;
-        let currentShifter = null;           // 当前活动的 PitchShifter 实例
+        let currentShifter = null;
         let isPlaying = false;
         let stopRequested = false;
         
@@ -126,6 +130,104 @@
             }
         }
         
+        // 解析音高字符串（支持 +5, -3, 0to12, to+7, -5to 等格式）
+        function parsePitch(str) {
+            if (!str || str.trim() === '') return 0;
+            str = str.trim();
+            let val = parseFloat(str);
+            if (!isNaN(val)) return val;
+            if (str[0] === '+') return parseFloat(str.slice(1));
+            if (str[0] === '-') return parseFloat(str);
+            return 0;
+        }
+        
+        // 解析音高对（支持滑音）
+        function parsePitchPair(pitchPart) {
+            let startPitch = 0;
+            let endPitch = null;
+            
+            if (!pitchPart || pitchPart === '') {
+                return { start: 0, end: null };
+            }
+            
+            if (pitchPart.includes('to')) {
+                const [startStr, endStr] = pitchPart.split('to');
+                startPitch = parsePitch(startStr);
+                endPitch = parsePitch(endStr);
+            } else {
+                startPitch = parsePitch(pitchPart);
+                endPitch = null;
+            }
+            
+            return { start: startPitch, end: endPitch };
+        }
+        
+        // 解析序列字符串（支持省略参数，使用默认值）
+        function parseSequence(inputStr) {
+            if (!inputStr || inputStr.trim() === '') {
+                return [];
+            }
+            
+            const parts = inputStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            const tasks = [];
+            
+            for (let part of parts) {
+                // 默认值
+                let fileName = '';
+                let pitchPart = '';
+                let tempoVal = 1.0;
+                
+                // 处理 @ 速度系数（可选）
+                if (part.includes('@')) {
+                    const atIndex = part.lastIndexOf('@');
+                    const beforeAt = part.substring(0, atIndex);
+                    const afterAt = part.substring(atIndex + 1);
+                    
+                    // 解析速度系数
+                    if (afterAt && afterAt.trim()) {
+                        tempoVal = parseFloat(afterAt);
+                        if (isNaN(tempoVal)) tempoVal = 1.0;
+                        tempoVal = Math.min(2.0, Math.max(0.5, tempoVal));
+                    }
+                    part = beforeAt;
+                }
+                
+                // 处理 : 分隔文件名和音高参数
+                const colonIndex = part.indexOf(':');
+                if (colonIndex === -1) {
+                    addLog(`无效序列格式(缺少冒号): ${part}`, true);
+                    continue;
+                }
+                
+                fileName = part.substring(0, colonIndex).trim();
+                pitchPart = part.substring(colonIndex + 1).trim();
+                
+                if (!fileName) {
+                    addLog(`无效序列格式(缺少文件名): ${part}`, true);
+                    continue;
+                }
+                
+                // 解析音高参数（支持滑音，支持省略）
+                const { start: startPitch, end: endPitch } = parsePitchPair(pitchPart);
+                
+                tasks.push({
+                    fileKey: fileName,
+                    startPitch: startPitch,
+                    glideTo: endPitch,  // 如果为null表示无滑音
+                    tempo: tempoVal
+                });
+                
+                // 日志输出解析结果
+                if (endPitch !== null && endPitch !== startPitch) {
+                    addLog(`解析: ${fileName} | 滑音 ${startPitch} → ${endPitch} @ ${tempoVal}x`);
+                } else {
+                    addLog(`解析: ${fileName} | 音高 ${startPitch} @ ${tempoVal}x`);
+                }
+            }
+            
+            return tasks;
+        }
+        
         // 初始化 AudioContext
         async function initAudioContext() {
             if (audioCtx && audioCtx.state !== 'closed') {
@@ -145,7 +247,7 @@
             stopRequested = true;
             if (currentShifter) {
                 try {
-                    currentShifter.off();      // 移除事件监听
+                    currentShifter.off();
                     currentShifter.disconnect();
                 } catch(e) {}
                 currentShifter = null;
@@ -159,7 +261,7 @@
             addLog("播放已停止。");
         }
         
-        // 播放单个 AudioBuffer (使用 PitchShifter)
+        // 播放单个 AudioBuffer
         async function playBufferWithShifter(buffer, tempo, pitchSemitones, glideOptions = null) {
             return new Promise(async (resolve, reject) => {
                 try {
@@ -177,23 +279,20 @@
                     stopRequested = false;
                     
                     // 创建 PitchShifter 实例
-                    // PitchShifter(audioCtx, audioBuffer, bufferSize)
                     const shifter = new PitchShifter(audioCtx, buffer, 16384);
                     
                     // 设置参数
                     shifter.tempo = tempo;
                     shifter.pitchSemitones = pitchSemitones;
                     
-                    // 创建 GainNode 用于音量控制
+                    // 创建 GainNode
                     const gainNode = audioCtx.createGain();
                     gainNode.connect(audioCtx.destination);
-                    
-                    // 连接 shifter 到 gainNode
                     shifter.connect(gainNode);
                     
                     currentShifter = shifter;
                     
-                    // 监听播放完成事件
+                    // 监听播放完成
                     const onFinish = () => {
                         if (glideAnimationId) {
                             cancelAnimationFrame(glideAnimationId);
@@ -210,18 +309,16 @@
                     
                     shifter.on('end', onFinish);
                     
-                    // 处理滑音：如果提供了滑音参数，实时更新 pitch
-                    if (glideOptions && glideOptions.start !== undefined && glideOptions.end !== undefined) {
+                    // 处理滑音
+                    if (glideOptions && glideOptions.start !== undefined && glideOptions.end !== undefined && glideOptions.start !== glideOptions.end) {
                         isGlideActive = true;
                         glideStartPitch = glideOptions.start;
                         glideEndPitch = glideOptions.end;
                         glideDuration = buffer.duration;
                         glideStartTime = audioCtx.currentTime;
                         
-                        // 设置起始音高
                         shifter.pitchSemitones = glideStartPitch;
                         
-                        // 动画更新音高（由于 PitchShifter 不提供实时更新回调，需要用定时器）
                         function updateGlide() {
                             if (!isPlaying || !isGlideActive || !currentShifter || currentShifter !== shifter) {
                                 glideAnimationId = null;
@@ -243,9 +340,6 @@
                     }
                     
                     isPlaying = true;
-                    
-                    // 直接连接后自动开始播放
-                    // PitchShifter 在 connect 后会自动开始播放
                     
                 } catch (err) {
                     addLog(`播放失败: ${err.message}`, true);
@@ -280,11 +374,11 @@
                 
                 // 准备滑音参数
                 let glideOpt = null;
-                if (task.glideTo !== undefined && task.startPitch !== task.glideTo) {
+                if (task.glideTo !== null && task.startPitch !== task.glideTo) {
                     glideOpt = { start: task.startPitch, end: task.glideTo };
-                    addLog(`播放: ${task.fileKey} | 滑音: ${task.startPitch}半音 → ${task.glideTo}半音 | 速度: ${task.tempo}`);
+                    addLog(`▶️ 播放: ${task.fileKey} | 滑音: ${task.startPitch}半音 → ${task.glideTo}半音 | 速度: ${task.tempo}`);
                 } else {
-                    addLog(`播放: ${task.fileKey} | 音高: ${task.startPitch}半音 | 速度: ${task.tempo}`);
+                    addLog(`▶️ 播放: ${task.fileKey} | 音高: ${task.startPitch}半音 | 速度: ${task.tempo}`);
                 }
                 
                 // 更新全局实时参数
@@ -306,67 +400,9 @@
             }
             
             if (!stopRequested) {
-                addLog("序列播放完毕。");
+                addLog("✅ 序列播放完毕。");
             }
             isPlaying = false;
-        }
-        
-        // 解析序列字符串
-        function parseSequence(inputStr) {
-            const parts = inputStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
-            const tasks = [];
-            
-            for (let part of parts) {
-                // 格式: 文件名:音高参数@速度系数
-                const match = part.match(/^([^:]+):(.+)@([\d\.]+)$/);
-                if (!match) {
-                    addLog(`无效序列格式: ${part}`, true);
-                    continue;
-                }
-                
-                const fileName = match[1].trim();
-                const pitchPart = match[2].trim();
-                let tempoVal = parseFloat(match[3]);
-                
-                if (isNaN(tempoVal) || tempoVal < 0.5) tempoVal = 1.0;
-                tempoVal = Math.min(2.0, Math.max(0.5, tempoVal));
-                
-                let startPitch = 0, glideTo = null;
-                
-                if (pitchPart.includes('to')) {
-                    const [startStr, endStr] = pitchPart.split('to');
-                    startPitch = parsePitch(startStr);
-                    glideTo = parsePitch(endStr);
-                } else {
-                    startPitch = parsePitch(pitchPart);
-                }
-                
-                if (isNaN(startPitch)) startPitch = 0;
-                if (glideTo !== null && isNaN(glideTo)) glideTo = startPitch;
-                
-                tasks.push({
-                    fileKey: fileName,
-                    startPitch: startPitch,
-                    glideTo: glideTo,
-                    tempo: tempoVal
-                });
-            }
-            
-            return tasks;
-        }
-        
-        function parsePitch(str) {
-            str = str.trim();
-            let val = parseFloat(str);
-            if (!isNaN(val)) return val;
-            if (str[0] === '+') return parseFloat(str.slice(1));
-            if (str[0] === '-') return parseFloat(str);
-            return 0;
-        }
-        
-        // 半音转 pitch ratio（备用）
-        function semitonesToRatio(semitones) {
-            return Math.pow(2, semitones / 12);
         }
         
         // 文件处理
@@ -429,7 +465,7 @@
             await stopPlayback();
             
             if (type === 'tempo') {
-                addLog("测试1: 变速演示 0.5x → 1.0x → 1.5x");
+                addLog("🧪 测试1: 变速演示 0.5x → 1.0x → 1.5x");
                 for (let t of [0.5, 1.0, 1.5]) {
                     if (stopRequested) break;
                     currentTempo = t;
@@ -438,9 +474,9 @@
                     await playBufferWithShifter(testBuffer, t, 0, null);
                     await new Promise(r => setTimeout(r, 100));
                 }
-                addLog("变速演示完成");
+                addLog("✅ 变速演示完成");
             } else if (type === 'pitch') {
-                addLog("测试2: 变调演示 -5半音 → 0 → +5半音");
+                addLog("🧪 测试2: 变调演示 -5半音 → 0 → +5半音");
                 for (let p of [-5, 0, 5]) {
                     if (stopRequested) break;
                     currentPitch = p;
@@ -449,11 +485,11 @@
                     await playBufferWithShifter(testBuffer, 1.0, p, null);
                     await new Promise(r => setTimeout(r, 100));
                 }
-                addLog("变调演示完成");
+                addLog("✅ 变调演示完成");
             } else if (type === 'glide') {
-                addLog("测试3: 滑音演示 从原调平滑升至+12半音");
+                addLog("🧪 测试3: 滑音演示 从原调平滑升至+12半音");
                 await playBufferWithShifter(testBuffer, 1.0, 0, { start: 0, end: 12 });
-                addLog("滑音演示完成");
+                addLog("✅ 滑音演示完成");
             }
         }
         
@@ -485,8 +521,7 @@
             stopPlayback();
         });
         
-        // 实时参数滑块 - 注意：PitchShifter 在播放中实时调整可能需要重新连接
-        // 由于技术限制，实时调整在当前版本可能无法在播放中生效，但会作用于下一个任务
+        // 实时参数滑块
         document.getElementById('tempoSlider').addEventListener('input', (e) => {
             currentTempo = parseFloat(e.target.value);
             document.getElementById('tempoValue').innerText = currentTempo.toFixed(2);
@@ -516,13 +551,17 @@
         document.getElementById('testPitchBtn').onclick = () => runTest('pitch');
         document.getElementById('testGlideBtn').onclick = () => runTest('glide');
         
-        // 初始化 - 先创建 AudioContext 但保持挂起状态，等待用户交互
+        // 初始化
         (async () => {
             try {
-                // 先创建但不自动恢复，等待用户点击播放按钮时会恢复
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                addLog("✅ SoundTouchJS 引擎已就绪 (AudioContext 初始为挂起状态，点击播放时自动激活)");
-                addLog("ℹ️ 提示：首次播放需浏览器允许音频上下文");
+                addLog("✅ SoundTouchJS 引擎已就绪");
+                addLog("📝 支持格式示例:");
+                addLog("   • a:0@1       - 文件名a, 音高0, 速度1");
+                addLog("   • b:+5        - 文件名b, 音高+5, 速度默认1.0");
+                addLog("   • c:@0.8      - 文件名c, 音高默认0, 速度0.8");
+                addLog("   • d:0to5      - 文件名d, 滑音0→5, 速度默认1.0");
+                addLog("   • e:to+3@1.2  - 文件名e, 滑音0→+3, 速度1.2");
             } catch (err) {
                 addLog(`❌ 初始化失败: ${err.message}`, true);
             }
