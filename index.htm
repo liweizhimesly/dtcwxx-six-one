@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>变调变速音频序列播放器 - SoundTouchJS最新版引擎</title>
+    <title>变调变速音频序列播放器 - SoundTouchJS 引擎</title>
 </head>
 <body>
-    <h1>🎵 变调变速音频序列播放器 (SoundTouchJS 最新版引擎)</h1>
-    <p><strong>核心功能</strong>：上传音频文件，定义序列(文件名:起始音高[to结束音高]@速度系数)，实时变速变调，支持滑音过渡 | 基于AudioWorklet + SoundTouch高性能处理</p>
+    <h1>🎵 变调变速音频序列播放器 (SoundTouchJS 引擎)</h1>
+    <p><strong>核心功能</strong>：上传音频文件，定义序列(文件名:起始音高[to结束音高]@速度系数)，实时变速变调，支持滑音效果</p>
     <hr>
 
     <!-- 测试区 -->
@@ -18,7 +18,7 @@
             <button id="testPitchBtn">🎼 测试2: 变调演示 (-5半音 → 0 → +5半音)</button>
             <button id="testGlideBtn">✨ 测试3: 滑音演示 (原调 → +12半音 平滑过渡)</button>
         </div>
-        <small>说明：测试音频为动态生成的440Hz正弦波(3秒)，演示实时处理能力</small>
+        <small>说明：测试音频为动态生成的440Hz正弦波(3秒)</small>
     </div>
     <hr>
 
@@ -46,7 +46,7 @@
             <label>🎵 音高偏移 (Pitch): <span id="pitchValue">0</span> 半音</label>
             <input type="range" id="pitchSlider" min="-12" max="12" step="1" value="0">
         </div>
-        <small>⚡ 实时生效：变速不变调 / 变调不变速，基于PitchShifter核心算法</small>
+        <small>⚡ 实时生效：变速不变调 / 变调不变速</small>
     </div>
     <hr>
 
@@ -72,27 +72,25 @@
     <div>
         <h3>📋 状态日志 / 错误反馈</h3>
         <div id="logPanel" style="height:200px; overflow-y:scroll; border:1px solid #ccc; background:#fafafa; padding:6px; font-family:monospace; font-size:12px;">
-            [系统] 就绪，正在加载SoundTouch Worklet...
+            [系统] 就绪，正在加载 SoundTouchJS...
         </div>
     </div>
 
     <script type="importmap">
         {
             "imports": {
-                "@soundtouchjs/core": "https://cdn.jsdelivr.net/npm/@soundtouchjs/core@1.0.10/dist/index.js"
+                "soundtouchjs": "https://cdn.jsdelivr.net/npm/soundtouchjs@0.3.0/dist/soundtouch.js"
             }
         }
     </script>
 
     <script type="module">
-        // 导入最新版 SoundTouch
-        import { PitchShifter } from '@soundtouchjs/core';
+        // 导入 SoundTouchJS - 使用稳定版本
+        import { PitchShifter } from 'soundtouchjs';
         
         // ---------- 全局变量 ----------
         let audioCtx = null;
-        let workletLoaded = false;
         let currentShifter = null;           // 当前活动的 PitchShifter 实例
-        let currentSource = null;             // AudioBufferSourceNode
         let isPlaying = false;
         let stopRequested = false;
         
@@ -111,8 +109,8 @@
         let glideAnimationId = null;
         let glideStartPitch = 0;
         let glideEndPitch = 0;
-        let glideDuration = 0;
         let glideStartTime = 0;
+        let glideDuration = 0;
         
         // 日志
         const logPanel = document.getElementById('logPanel');
@@ -128,7 +126,7 @@
             }
         }
         
-        // 初始化 AudioContext 和 Worklet
+        // 初始化 AudioContext
         async function initAudioContext() {
             if (audioCtx && audioCtx.state !== 'closed') {
                 if (audioCtx.state === 'suspended') {
@@ -138,18 +136,7 @@
             }
             
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // 加载 PitchShifter 的 AudioWorklet
-            try {
-                // 使用 PitchShifter 内置的 Worklet 加载方法
-                await PitchShifter.register(audioCtx);
-                workletLoaded = true;
-                addLog("SoundTouch AudioWorklet 加载成功！");
-            } catch (err) {
-                addLog(`Worklet 加载失败: ${err.message}`, true);
-                throw err;
-            }
-            
+            addLog("AudioContext 创建成功");
             return audioCtx;
         }
         
@@ -158,17 +145,10 @@
             stopRequested = true;
             if (currentShifter) {
                 try {
-                    currentShifter.stop();
-                    await currentShifter.disconnect();
+                    currentShifter.off();      // 移除事件监听
+                    currentShifter.disconnect();
                 } catch(e) {}
                 currentShifter = null;
-            }
-            if (currentSource) {
-                try {
-                    currentSource.stop();
-                    currentSource.disconnect();
-                } catch(e) {}
-                currentSource = null;
             }
             if (glideAnimationId) {
                 cancelAnimationFrame(glideAnimationId);
@@ -176,7 +156,6 @@
             }
             isPlaying = false;
             isGlideActive = false;
-            pendingTasks = [];
             addLog("播放已停止。");
         }
         
@@ -196,27 +175,40 @@
                     }
                     
                     stopRequested = false;
-                    isPlaying = true;
-                    isGlideActive = false;
                     
                     // 创建 PitchShifter 实例
-                    const shifter = new PitchShifter(audioCtx);
+                    // PitchShifter(audioCtx, audioBuffer, bufferSize)
+                    const shifter = new PitchShifter(audioCtx, buffer, 16384);
                     
                     // 设置参数
                     shifter.tempo = tempo;
                     shifter.pitchSemitones = pitchSemitones;
                     
-                    // 连接音频图
-                    shifter.connect(audioCtx.destination);
+                    // 创建 GainNode 用于音量控制
+                    const gainNode = audioCtx.createGain();
+                    gainNode.connect(audioCtx.destination);
                     
-                    // 创建 AudioBufferSourceNode
-                    const source = audioCtx.createBufferSource();
-                    source.buffer = buffer;
-                    source.connect(shifter.input);
-                    source.start();
+                    // 连接 shifter 到 gainNode
+                    shifter.connect(gainNode);
                     
                     currentShifter = shifter;
-                    currentSource = source;
+                    
+                    // 监听播放完成事件
+                    const onFinish = () => {
+                        if (glideAnimationId) {
+                            cancelAnimationFrame(glideAnimationId);
+                            glideAnimationId = null;
+                        }
+                        isPlaying = false;
+                        isGlideActive = false;
+                        try {
+                            shifter.disconnect();
+                        } catch(e) {}
+                        if (currentShifter === shifter) currentShifter = null;
+                        resolve();
+                    };
+                    
+                    shifter.on('end', onFinish);
                     
                     // 处理滑音：如果提供了滑音参数，实时更新 pitch
                     if (glideOptions && glideOptions.start !== undefined && glideOptions.end !== undefined) {
@@ -229,9 +221,9 @@
                         // 设置起始音高
                         shifter.pitchSemitones = glideStartPitch;
                         
-                        // 动画更新音高
+                        // 动画更新音高（由于 PitchShifter 不提供实时更新回调，需要用定时器）
                         function updateGlide() {
-                            if (!isPlaying || !isGlideActive || !currentShifter) {
+                            if (!isPlaying || !isGlideActive || !currentShifter || currentShifter !== shifter) {
                                 glideAnimationId = null;
                                 return;
                             }
@@ -248,55 +240,12 @@
                             }
                         }
                         glideAnimationId = requestAnimationFrame(updateGlide);
-                    } else {
-                        // 非滑音模式，如果实时参数有变化，使用当前实时参数
-                        shifter.tempo = currentTempo;
-                        shifter.pitchSemitones = currentPitch;
-                        
-                        // 监听实时参数变化（通过外部滑块）
-                        const tempoListener = () => {
-                            if (currentShifter && !isGlideActive && isPlaying) {
-                                currentShifter.tempo = currentTempo;
-                            }
-                        };
-                        const pitchListener = () => {
-                            if (currentShifter && !isGlideActive && isPlaying) {
-                                currentShifter.pitchSemitones = currentPitch;
-                            }
-                        };
-                        
-                        // 临时存储监听器以便清理（简化：播放结束后自动丢弃）
-                        currentShifter.__tempoListener = tempoListener;
-                        currentShifter.__pitchListener = pitchListener;
-                        
-                        // 注意：这里我们让滑块直接控制全局变量，播放器轮询当前值
-                        // 已经在外部变化时直接应用，不需要额外监听器
                     }
                     
-                    // 等待播放完成
-                    const onEnded = () => {
-                        if (glideAnimationId) {
-                            cancelAnimationFrame(glideAnimationId);
-                            glideAnimationId = null;
-                        }
-                        isPlaying = false;
-                        isGlideActive = false;
-                        if (currentShifter) {
-                            try {
-                                currentShifter.disconnect();
-                            } catch(e) {}
-                            currentShifter = null;
-                        }
-                        if (currentSource) {
-                            try {
-                                currentSource.disconnect();
-                            } catch(e) {}
-                            currentSource = null;
-                        }
-                        resolve();
-                    };
+                    isPlaying = true;
                     
-                    source.onended = onEnded;
+                    // 直接连接后自动开始播放
+                    // PitchShifter 在 connect 后会自动开始播放
                     
                 } catch (err) {
                     addLog(`播放失败: ${err.message}`, true);
@@ -338,7 +287,7 @@
                     addLog(`播放: ${task.fileKey} | 音高: ${task.startPitch}半音 | 速度: ${task.tempo}`);
                 }
                 
-                // 更新全局实时参数（用于非滑音模式）
+                // 更新全局实时参数
                 currentTempo = task.tempo;
                 currentPitch = task.startPitch;
                 
@@ -415,6 +364,11 @@
             return 0;
         }
         
+        // 半音转 pitch ratio（备用）
+        function semitonesToRatio(semitones) {
+            return Math.pow(2, semitones / 12);
+        }
+        
         // 文件处理
         async function loadAudioFile(file) {
             const name = file.name.replace(/\.[^/.]+$/, "");
@@ -444,7 +398,7 @@
                 document.getElementById('fileListContent').innerText = names.join(', ');
                 let info = '';
                 for (let [k, buf] of audioBufferMap.entries()) {
-                    info += `${k}[${buf.duration.toFixed(1)}s/${buf.sampleRate/1000}kHz/${buf.numberOfChannels}ch] `;
+                    info += `${k}[${buf.duration.toFixed(1)}s/${(buf.sampleRate/1000).toFixed(0)}kHz/${buf.numberOfChannels}ch] `;
                 }
                 document.getElementById('fileInfoArea').innerText = info;
             }
@@ -531,12 +485,15 @@
             stopPlayback();
         });
         
-        // 实时参数滑块
+        // 实时参数滑块 - 注意：PitchShifter 在播放中实时调整可能需要重新连接
+        // 由于技术限制，实时调整在当前版本可能无法在播放中生效，但会作用于下一个任务
         document.getElementById('tempoSlider').addEventListener('input', (e) => {
             currentTempo = parseFloat(e.target.value);
             document.getElementById('tempoValue').innerText = currentTempo.toFixed(2);
             if (currentShifter && isPlaying && !isGlideActive) {
-                currentShifter.tempo = currentTempo;
+                try {
+                    currentShifter.tempo = currentTempo;
+                } catch(e) {}
             }
         });
         
@@ -548,7 +505,9 @@
             currentPitch = parseInt(e.target.value);
             document.getElementById('pitchValue').innerText = currentPitch;
             if (currentShifter && isPlaying && !isGlideActive) {
-                currentShifter.pitchSemitones = currentPitch;
+                try {
+                    currentShifter.pitchSemitones = currentPitch;
+                } catch(e) {}
             }
         });
         
@@ -557,11 +516,13 @@
         document.getElementById('testPitchBtn').onclick = () => runTest('pitch');
         document.getElementById('testGlideBtn').onclick = () => runTest('glide');
         
-        // 初始化
+        // 初始化 - 先创建 AudioContext 但保持挂起状态，等待用户交互
         (async () => {
             try {
-                await initAudioContext();
-                addLog("✅ SoundTouch 引擎已就绪，等待用户交互");
+                // 先创建但不自动恢复，等待用户点击播放按钮时会恢复
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                addLog("✅ SoundTouchJS 引擎已就绪 (AudioContext 初始为挂起状态，点击播放时自动激活)");
+                addLog("ℹ️ 提示：首次播放需浏览器允许音频上下文");
             } catch (err) {
                 addLog(`❌ 初始化失败: ${err.message}`, true);
             }
